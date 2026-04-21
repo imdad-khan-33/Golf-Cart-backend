@@ -57,12 +57,6 @@ export const deleteAccountSchema = z.object({
   })
 });
 
-export const googleSignInSchema = z.object({
-  body: z.object({
-    idToken: z.string().min(1, 'Google ID token is required')
-  })
-});
-
 // Cart Schemas
 export const createCartSchema = z.object({
   body: z.object({
