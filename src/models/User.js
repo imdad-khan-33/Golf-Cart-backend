@@ -35,7 +35,7 @@ const userSchema = new mongoose.Schema(
     },
     isVerified: {
       type: Boolean,
-      default: true
+      default: false
     },
     otp: {
       type: String,
@@ -54,7 +54,7 @@ const userSchema = new mongoose.Schema(
     },
     isActive: {
       type: Boolean,
-      default: true
+      default: false
     },
     role: {
       type: String,

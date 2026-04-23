@@ -19,8 +19,9 @@ export const validate = (schema) => {
       const validationResult = schema.safeParse(dataToValidate);
 
       if (!validationResult.success) {
+        console.log('ZOD VALIDATION ERROR:', JSON.stringify(validationResult.error, null, 2));
         // Format Zod errors into readable message
-        const errors = (validationResult.error?.errors || [])
+        const errors = (validationResult.error?.issues || validationResult.error?.errors || [])
           .map(err => {
             const path = err.path.join('.');
             return `${path}: ${err.message}`;
@@ -28,7 +29,7 @@ export const validate = (schema) => {
 
         const errorMsg = errors.length > 0 
           ? errors.join(' | ')
-          : 'Validation Error: Invalid input data';
+          : `Validation Error: Invalid input data. Details: ${validationResult.error.message || 'unknown'}`;
 
         throw new AppError(errorMsg, 400);
       }

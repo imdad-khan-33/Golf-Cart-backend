@@ -141,9 +141,15 @@ export const forgotPassword = async (req, res, next) => {
     // Send OTP via email
     try {
       await sendOTPEmail(email, otp, user.name);
+      console.log(` OTP email sent successfully to: ${email}`);
     } catch (emailError) {
-      console.error('Email sending failed:', emailError);
-      // Continue anyway - OTP is saved in DB
+      console.error(' Email sending failed:', emailError.message);
+      // Reset OTP fields since email failed
+      user.otp = null;
+      user.otpExpires = null;
+      user.otpAttempts = 0;
+      await user.save();
+      throw new AppError('Failed to send OTP email. Please check your email configuration.', 500);
     }
 
     // Response with OTP for development/testing

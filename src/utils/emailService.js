@@ -1,23 +1,26 @@
 import nodemailer from 'nodemailer';
 
-const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-  port: process.env.EMAIL_PORT || 587,
-  secure: false,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASSWORD
-  }
-});
+const getTransporter = () => {
+  const isGmail = process.env.EMAIL_HOST?.includes('gmail');
+  return nodemailer.createTransport({
+    host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+    port: parseInt(process.env.EMAIL_PORT) || (isGmail ? 465 : 587),
+    secure: isGmail ? true : (process.env.EMAIL_PORT === '465'),
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASSWORD
+    }
+  });
+};
 
 export const sendOTPEmail = async (email, otp, userName) => {
   const mailOptions = {
     from: process.env.EMAIL_USER,
     to: email,
-    subject: 'Golf Cart - OTP Verification',
+    subject: `Golf Cart - OTP Verification (${Math.floor(1000 + Math.random() * 9000)})`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #333;">Welcome to Golf Cart! 🏌️</h2>
+        <h2 style="color: #333;">Welcome to Golf Cart!</h2>
         <p>Hi ${userName},</p>
         <p>Your OTP for password reset is:</p>
         <h1 style="color: #007bff; font-size: 36px; letter-spacing: 5px;">${otp}</h1>
@@ -28,7 +31,7 @@ export const sendOTPEmail = async (email, otp, userName) => {
   };
 
   try {
-    await transporter.sendMail(mailOptions);
+    await getTransporter().sendMail(mailOptions);
     return true;
   } catch (error) {
     console.error('Email Error:', error);
@@ -55,7 +58,7 @@ export const sendResetPasswordEmail = async (email, resetLink, userName) => {
   };
 
   try {
-    await transporter.sendMail(mailOptions);
+    await getTransporter().sendMail(mailOptions);
     return true;
   } catch (error) {
     console.error('Email Error:', error);
@@ -81,7 +84,7 @@ export const sendVerificationEmail = async (email, verificationLink, userName) =
   };
 
   try {
-    await transporter.sendMail(mailOptions);
+    await getTransporter().sendMail(mailOptions);
     return true;
   } catch (error) {
     console.error('Email Error:', error);
