@@ -71,6 +71,18 @@ const bookingSchema = new mongoose.Schema(
       type: Date,
       default: null,
       description: 'Timestamp when trip actually started'
+    },
+    pickupLocation: {
+      address: { type: String },
+      lat: { type: Number },
+      lng: { type: Number },
+      _id: false
+    },
+    dropoffLocation: {
+      address: { type: String },
+      lat: { type: Number },
+      lng: { type: Number },
+      _id: false
     }
   },
   { timestamps: true }

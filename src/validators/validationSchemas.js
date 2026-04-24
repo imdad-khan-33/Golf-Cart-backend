@@ -111,7 +111,17 @@ export const createBookingSchema = z.object({
     cartId: z.string().min(1, 'Cart ID is required'),
     pickupDateTime: z.string().datetime('Invalid pickup date/time format'),
     dropoffDateTime: z.string().datetime('Invalid dropoff date/time format'),
-    specialRequests: z.string().optional()
+    specialRequests: z.string().max(500, 'Special requests cannot exceed 500 characters').optional(),
+    pickupLocation: z.object({
+      address: z.string().min(3, 'Pickup address must be at least 3 characters'),
+      lat: z.number().min(-90).max(90, 'Invalid latitude'),
+      lng: z.number().min(-180).max(180, 'Invalid longitude')
+    }).optional(),
+    dropoffLocation: z.object({
+      address: z.string().min(3, 'Dropoff address must be at least 3 characters'),
+      lat: z.number().min(-90).max(90, 'Invalid latitude'),
+      lng: z.number().min(-180).max(180, 'Invalid longitude')
+    }).optional()
   }).refine(data => {
     const pickup = new Date(data.pickupDateTime);
     const dropoff = new Date(data.dropoffDateTime);

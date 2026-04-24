@@ -2,18 +2,18 @@
 
 A professional Express.js + MongoDB backend for the Golf Cart mobile application built with Flutter.
 
-## 📋 Features
+## Features
 
-- ✅ User Authentication (Register, Login)
-- ✅ Password Reset with OTP Verification
-- ✅ JWT Token-based Authorization
-- ✅ Email Notifications
-- ✅ Secure Password Hashing with Bcrypt
-- ✅ Input Validation
-- ✅ Error Handling
-- ✅ CORS Support
+- User Authentication (Register, Login)
+- Password Reset with OTP Verification
+- JWT Token-based Authorization
+- Email Notifications
+- Secure Password Hashing with Bcrypt
+- Input Validation
+- Error Handling
+- CORS Support
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 - **Runtime:** Node.js
 - **Framework:** Express.js
@@ -50,7 +50,7 @@ Golf-Card-backend/
 └── README.md                     # This file
 ```
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 
@@ -257,7 +257,7 @@ Authorization: Bearer <token>
 }
 ```
 
-## 🔒 Authentication
+## Authentication
 
 All protected routes require a JWT token in the Authorization header:
 
@@ -267,7 +267,7 @@ Authorization: Bearer <your_jwt_token>
 
 The token is valid for 7 days by default (configurable in `.env`).
 
-## 🔄 Request/Response Format
+## Request/Response Format
 
 ### Headers
 ```
@@ -291,7 +291,7 @@ Content-Type: application/json
 }
 ```
 
-## ⚠️ Error Codes
+## Error Codes
 
 | Status Code | Meaning |
 |-------------|---------|
@@ -303,7 +303,7 @@ Content-Type: application/json
 | 404 | Not Found - Resource not found |
 | 500 | Server Error - Internal error |
 
-## 📧 Email Setup (Gmail)
+## Email Setup (Gmail)
 
 1. Enable 2-Step Verification on your Google Account
 2. Generate an App Password: https://myaccount.google.com/apppasswords
@@ -313,7 +313,7 @@ EMAIL_USER=your_email@gmail.com
 EMAIL_PASSWORD=your_app_specific_password
 ```
 
-## 🧪 Testing
+## Testing
 
 You can test the API using:
 
@@ -328,7 +328,7 @@ curl -X POST http://localhost:5000/api/auth/login \
   -d '{"email":"john@example.com","password":"password123"}'
 ```
 
-## 📝 Next Steps
+## Next Steps
 
 The following features will be added next:
 - [ ] User Profile Management
@@ -349,5 +349,5 @@ Senior MERN Stack Developer
 
 ---
 
-**Happy Coding! 🚀**
+**Happy Coding!**
 "# Golf-Cart-backend" 
