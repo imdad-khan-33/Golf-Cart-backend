@@ -149,8 +149,9 @@ export const formatBookingsResponse = (bookings, minimal = false) => {
 
 /**
  * Format grouped bookings by date with metadata
- * @param {Object} groupedBookings - Object with date groups
- * @returns {Object} Formatted grouped bookings
+ * Note: bookings should already be formatted (using formatBookingMinimal)
+ * @param {Object} groupedBookings - Object with date groups (pre-formatted bookings)
+ * @returns {Object} Formatted grouped bookings with count and metadata
  */
 export const formatGroupedBookings = (groupedBookings) => {
   const result = {};
@@ -159,7 +160,7 @@ export const formatGroupedBookings = (groupedBookings) => {
     if (bookings.length > 0) {
       result[groupKey] = {
         count: bookings.length,
-        bookings: bookings.map(booking => formatBookingMinimal(booking))
+        bookings: bookings  // Bookings are already formatted, don't format again!
       };
     }
   });
