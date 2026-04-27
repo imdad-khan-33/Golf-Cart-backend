@@ -1,18 +1,18 @@
 import mongoose from 'mongoose';
 import User from '../models/User.js';
 import Booking from '../models/Booking.js';
-import { generateToken, generateRefreshToken } from '../utils/tokenUtils.js';
+import { generateToken, generateRefreshToken, generateResetToken } from '../utils/tokenUtils.js';
 import { generateOTP, getOTPExpiryTime, isOTPExpired } from '../utils/otpUtils.js';
 import { sendOTPEmail, sendResetPasswordEmail } from '../utils/emailService.js';
 import { formatUserResponse } from '../utils/userFormatter.js';
 import { AppError } from '../middleware/errorHandler.js';
 
-// @desc    Register user
+// @desc    Register user - Send OTP
 // @route   POST /api/auth/register
 // @access  Public
 export const register = async (req, res, next) => {
   try {
-    const { name, email, password, confirmPassword,role } = req.body;
+    const { name, email, password, confirmPassword, role } = req.body;
 
     // Validation
     if (!name || !email || !password || !confirmPassword) {
@@ -29,19 +29,118 @@ export const register = async (req, res, next) => {
 
     // Check if user already exists
     let user = await User.findOne({ email });
-    if (user) {
+    if (user && user.isVerified) {
       throw new AppError('Email already registered', 400);
     }
 
-    // Create user
+    // Delete unverified user if exists (for retry)
+    if (user && !user.isVerified) {
+      await User.deleteOne({ _id: user._id });
+    }
+
+    // Create unverified user
     user = new User({
       name,
       email,
       password,
       role,
-
+      isVerified: false,
+      isActive: false
     });
 
+    await user.save();
+
+    // Generate OTP
+    const otp = generateOTP();
+    user.otp = otp;
+    user.otpExpires = getOTPExpiryTime();
+    user.otpAttempts = 0;
+    await user.save();
+
+    // Send OTP to email
+    try {
+      await sendOTPEmail(user.email, otp, user.name);
+      console.log(`[REGISTER] OTP sent to ${email}`);
+    } catch (emailError) {
+      console.error('[REGISTER] Email send failed:', emailError.message);
+      await User.deleteOne({ _id: user._id });
+      throw new AppError('Failed to send OTP email. Please try again.', 500);
+    }
+
+    const response = {
+      success: true,
+      message: 'OTP sent to your email. Please verify to complete registration.',
+      email: email
+    };
+
+    // Include OTP in response for development/testing
+    if (process.env.NODE_ENV === 'development') {
+      response.otp = otp;
+      response.testingNote = 'OTP is shown for testing purposes only. In production, this will not be visible.';
+    }
+
+    res.status(200).json(response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Verify registration OTP
+// @route   POST /api/auth/verify-register-otp
+// @access  Public
+export const verifyRegisterOTP = async (req, res, next) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      throw new AppError('Please provide email and OTP', 400);
+    }
+
+    const user = await User.findOne({ email }).select('+otp +otpExpires +otpAttempts');
+
+    if (!user) {
+      throw new AppError('User not found', 404);
+    }
+
+    if (user.isVerified) {
+      throw new AppError('User already verified', 400);
+    }
+
+    if (!user.otp) {
+      throw new AppError('OTP not found. Request a new one', 400);
+    }
+
+    // Check if OTP expired
+    if (isOTPExpired(user.otpExpires)) {
+      user.otp = null;
+      user.otpExpires = null;
+      user.otpAttempts = 0;
+      await user.save();
+      throw new AppError('OTP has expired. Request a new one', 400);
+    }
+
+    // Check max attempts
+    if (user.otpAttempts >= parseInt(process.env.MAX_OTP_ATTEMPTS || 5)) {
+      user.otp = null;
+      user.otpExpires = null;
+      user.otpAttempts = 0;
+      await user.save();
+      throw new AppError('Too many OTP attempts. Request a new one', 400);
+    }
+
+    // Verify OTP
+    if (user.otp !== otp) {
+      user.otpAttempts += 1;
+      await user.save();
+      throw new AppError('Invalid OTP', 400);
+    }
+
+    // OTP verified - mark user as verified and activate
+    user.isVerified = true;
+    user.isActive = true;
+    user.otp = null;
+    user.otpExpires = null;
+    user.otpAttempts = 0;
     await user.save();
 
     // Generate tokens
@@ -50,7 +149,7 @@ export const register = async (req, res, next) => {
 
     res.status(201).json({
       success: true,
-      message: 'User registered successfully',
+      message: 'Email verified successfully. Registration complete!',
       token,
       refreshToken,
       user: formatUserResponse(user)
@@ -218,9 +317,12 @@ export const verifyOTP = async (req, res, next) => {
     }
 
     // OTP verified successfully - don't clear it yet, will be cleared after password reset
+    const resetToken = generateResetToken(user._id);
+    
     res.status(200).json({
       success: true,
-      message: 'OTP verified successfully'
+      message: 'OTP verified successfully',
+      resetToken // Return token for password reset step
     });
   } catch (error) {
     next(error);

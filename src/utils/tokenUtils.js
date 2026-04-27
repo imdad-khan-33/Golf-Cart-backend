@@ -12,6 +12,12 @@ export const generateRefreshToken = (id) => {
   });
 };
 
+export const generateResetToken = (id) => {
+  return jwt.sign({ id }, process.env.JWT_SECRET, {
+    expiresIn: '15m' // Short expiry for reset flow
+  });
+};
+
 export const verifyToken = (token, secret = process.env.JWT_SECRET) => {
   try {
     return jwt.verify(token, secret);

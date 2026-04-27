@@ -1,6 +1,7 @@
 import express from 'express';
 import {
   register,
+  verifyRegisterOTP,
   login,
   forgotPassword,
   verifyOTP,
@@ -27,6 +28,7 @@ const router = express.Router();
 
 // Public routes
 router.post('/register', validate(registerSchema), register);
+router.post('/verify-register-otp', validate(verifyOTPSchema), verifyRegisterOTP);
 router.post('/login', validate(loginSchema), login);
 router.post('/forgot-password', validate(forgotPasswordSchema), forgotPassword);
 router.post('/verify-otp', validate(verifyOTPSchema), verifyOTP);
