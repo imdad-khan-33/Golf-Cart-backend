@@ -159,6 +159,69 @@ export const verifyRegisterOTP = async (req, res, next) => {
   }
 };
 
+// @desc    Resend OTP for unverified users
+// @route   POST /api/auth/resend-otp
+
+export const resendOTP = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      throw new AppError('Please provide an email', 400);
+    }
+
+    // Find user by email
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      throw new AppError('No user found with this email', 404);
+    }
+
+    // Check if user is already verified
+    if (user.isVerified) {
+      throw new AppError('User is already verified', 400);
+    }
+
+    // Generate new OTP
+    const otp = generateOTP();
+    user.otp = otp;
+    user.otpExpires = getOTPExpiryTime();
+    user.otpAttempts = 0;
+
+    await user.save();
+
+    // Send OTP via email
+    try {
+      await sendOTPEmail(email, otp, user.name);
+      console.log(`[RESEND-OTP] OTP sent to ${email}`);
+    } catch (emailError) {
+      console.error('[RESEND-OTP] Email send failed:', emailError.message);
+      // Reset OTP fields since email failed
+      user.otp = null;
+      user.otpExpires = null;
+      user.otpAttempts = 0;
+      await user.save();
+      throw new AppError('Failed to send OTP email. Please try again.', 500);
+    }
+
+    const response = {
+      success: true,
+      message: 'OTP resent to your email. Please verify to complete registration.',
+      email: email
+    };
+
+    // Include OTP in response for development/testing
+    if (process.env.NODE_ENV === 'development') {
+      response.otp = otp;
+      response.testingNote = 'OTP is shown for testing purposes only. In production, this will not be visible.';
+    }
+
+    res.status(200).json(response);
+  } catch (error) {
+    next(error);
+  }
+};
+
 // @desc    Login user
 // @route   POST /api/auth/login
 // @access  Public

@@ -36,6 +36,12 @@ export const verifyOTPSchema = z.object({
   })
 });
 
+export const resendOTPSchema = z.object({
+  body: z.object({
+    email: z.string().email('Invalid email format')
+  })
+});
+
 export const resetPasswordSchema = z.object({
   body: z.object({
     email: z.string().email('Invalid email format'),
