@@ -19,7 +19,10 @@ export const registerSchema = z.object({
 export const loginSchema = z.object({
   body: z.object({
     email: z.string().email('Invalid email format'),
-    password: z.string().min(1, 'Password is required')
+    password: z.string().min(1, 'Password is required'),
+    loginType: z.enum(['user', 'driver'], {
+      errorMap: () => ({ message: 'loginType must be either "user" or "driver"' })
+    })
   })
 });
 
@@ -117,16 +120,16 @@ export const createBookingSchema = z.object({
     cartId: z.string().min(1, 'Cart ID is required'),
     pickupDateTime: z.string().datetime('Invalid pickup date/time format'),
     dropoffDateTime: z.string().datetime('Invalid dropoff date/time format'),
-    specialRequests: z.string().max(500, 'Special requests cannot exceed 500 characters').optional(),
+    specialRequests: z.string().optional(),
     pickupLocation: z.object({
-      address: z.string().min(3, 'Pickup address must be at least 3 characters'),
-      lat: z.number().min(-90).max(90, 'Invalid latitude'),
-      lng: z.number().min(-180).max(180, 'Invalid longitude')
+      address: z.string().min(1, 'Pickup address is required'),
+      latitude: z.number().min(-90).max(90, 'Invalid latitude'),
+      longitude: z.number().min(-180).max(180, 'Invalid longitude')
     }).optional(),
     dropoffLocation: z.object({
-      address: z.string().min(3, 'Dropoff address must be at least 3 characters'),
-      lat: z.number().min(-90).max(90, 'Invalid latitude'),
-      lng: z.number().min(-180).max(180, 'Invalid longitude')
+      address: z.string().min(1, 'Dropoff address is required'),
+      latitude: z.number().min(-90).max(90, 'Invalid latitude'),
+      longitude: z.number().min(-180).max(180, 'Invalid longitude')
     }).optional()
   }).refine(data => {
     const pickup = new Date(data.pickupDateTime);

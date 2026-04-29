@@ -3,12 +3,6 @@ import Cart from '../models/Cart.js';
 import Rating from '../models/Rating.js';
 import User from '../models/User.js';
 import { AppError } from '../middleware/errorHandler.js';
-import { 
-  formatBookingResponse, 
-  formatBookingMinimal, 
-  formatBookingsResponse,
-  formatGroupedBookings 
-} from '../utils/bookingFormatter.js';
 
 // @desc    Create booking
 // @route   POST /api/bookings
@@ -62,7 +56,23 @@ export const createBooking = async (req, res, next) => {
     res.status(201).json({
       success: true,
       message: 'Booking created successfully',
-      data: formatBookingResponse(populatedBooking)
+      booking: {
+        _id: populatedBooking._id,
+        cartId: populatedBooking.cartId,
+        pickupDateTime: populatedBooking.pickupDateTime,
+        dropoffDateTime: populatedBooking.dropoffDateTime,
+        pickupLocation: populatedBooking.pickupLocation,
+        dropoffLocation: populatedBooking.dropoffLocation,
+        estimatedDuration: populatedBooking.estimatedDuration,
+        cartPrice: populatedBooking.cartPrice,
+        totalPrice: populatedBooking.totalPrice,
+        status: populatedBooking.status,
+        specialRequests: populatedBooking.specialRequests,
+        notes: populatedBooking.notes,
+        driverId: populatedBooking.driverId,
+        completedAt: populatedBooking.completedAt,
+        cancelledAt: populatedBooking.cancelledAt
+      }
     });
   } catch (error) {
     next(error);
@@ -72,6 +82,53 @@ export const createBooking = async (req, res, next) => {
 // @desc    Get user's bookings
 // @route   GET /api/bookings
 // @access  Private
+// Helper function to get driver average rating
+const getDriverRating = async (driverId) => {
+  try {
+    const ratings = await Rating.find({ driverId });
+    if (ratings.length === 0) return 0;
+    const avgRating = ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length;
+    return Math.round(avgRating * 10) / 10; // Round to 1 decimal place
+  } catch (error) {
+    return 0;
+  }
+};
+
+// Helper function to group bookings by date
+const groupByDate = (bookings) => {
+  const grouped = {
+    Today: [],
+    Yesterday: [],
+    'This Week': [],
+    Older: []
+  };
+
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const weekAgo = new Date(today);
+  weekAgo.setDate(weekAgo.getDate() - 7);
+
+  bookings.forEach(booking => {
+    const bookingDate = new Date(booking.createdAt);
+    const bookingDateOnly = new Date(bookingDate.getFullYear(), bookingDate.getMonth(), bookingDate.getDate());
+    const todayDateOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const yesterdayDateOnly = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate());
+
+    if (bookingDateOnly.getTime() === todayDateOnly.getTime()) {
+      grouped.Today.push(booking);
+    } else if (bookingDateOnly.getTime() === yesterdayDateOnly.getTime()) {
+      grouped.Yesterday.push(booking);
+    } else if (bookingDateOnly > weekAgo) {
+      grouped['This Week'].push(booking);
+    } else {
+      grouped.Older.push(booking);
+    }
+  });
+
+  return grouped;
+};
+
 export const getUserBookings = async (req, res, next) => {
   try {
     const bookings = await Booking.find({ userId: req.user._id })
@@ -82,60 +139,51 @@ export const getUserBookings = async (req, res, next) => {
     // Get ratings for each driver
     const bookingsWithRatings = await Promise.all(
       bookings.map(async (booking) => {
-        let driverRating = null;
+        let driverRating = 0;
         if (booking.driverId) {
-          const ratings = await Rating.find({ driverId: booking.driverId._id });
-          if (ratings.length > 0) {
-            driverRating = Math.round(
-              (ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length) * 10
-            ) / 10;
-          }
+          driverRating = await getDriverRating(booking.driverId._id);
         }
-        return formatBookingMinimal(booking, driverRating);
+
+        return {
+          _id: booking._id,
+          cartId: booking.cartId,
+          pickupDateTime: booking.pickupDateTime,
+          dropoffDateTime: booking.dropoffDateTime,
+          estimatedDuration: booking.estimatedDuration,
+          cartPrice: booking.cartPrice,
+          totalPrice: booking.totalPrice,
+          status: booking.status,
+          specialRequests: booking.specialRequests,
+          notes: booking.notes,
+          driver: booking.driverId ? {
+            _id: booking.driverId._id,
+            name: booking.driverId.name,
+            email: booking.driverId.email,
+            rating: driverRating
+          } : null,
+          completedAt: booking.completedAt,
+          cancelledAt: booking.cancelledAt,
+          createdAt: booking.createdAt
+        };
       })
     );
 
     // Group bookings by date
-    const grouped = {
-      Today: [],
-      Yesterday: [],
-      'This Week': [],
-      Older: []
-    };
+    const groupedBookings = groupByDate(bookingsWithRatings);
 
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-    const weekAgo = new Date(today);
-    weekAgo.setDate(weekAgo.getDate() - 7);
-
-    bookingsWithRatings.forEach(booking => {
-      const bookingDate = new Date(booking.createdAt);
-      const bookingDateOnly = new Date(bookingDate.getFullYear(), bookingDate.getMonth(), bookingDate.getDate());
-      const todayDateOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-      const yesterdayDateOnly = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate());
-
-      if (bookingDateOnly.getTime() === todayDateOnly.getTime()) {
-        grouped.Today.push(booking);
-      } else if (bookingDateOnly.getTime() === yesterdayDateOnly.getTime()) {
-        grouped.Yesterday.push(booking);
-      } else if (bookingDateOnly > weekAgo) {
-        grouped['This Week'].push(booking);
-      } else {
-        grouped.Older.push(booking);
+    // Filter out empty groups and maintain order
+    const groupedResult = {};
+    ['Today', 'Yesterday', 'This Week', 'Older'].forEach(key => {
+      if (groupedBookings[key].length > 0) {
+        groupedResult[key] = groupedBookings[key];
       }
     });
 
-    // Filter out empty groups and create formatted response
-    const groupedResult = formatGroupedBookings(grouped);
-
     res.status(200).json({
       success: true,
-      data: {
-        total: bookings.length,
-        grouped: groupedResult,
-        all: bookingsWithRatings
-      }
+      count: bookings.length,
+      grouped: groupedResult,
+      bookings: bookingsWithRatings
     });
   } catch (error) {
     next(error);
@@ -148,8 +196,7 @@ export const getUserBookings = async (req, res, next) => {
 export const getBookingById = async (req, res, next) => {
   try {
     const booking = await Booking.findById(req.params.id)
-      .populate('cartId', 'name seats price type')
-      .populate('driverId', 'name email');
+      .populate('cartId', 'name seats price type');
 
     if (!booking) {
       throw new AppError('Booking not found', 404);
@@ -160,20 +207,23 @@ export const getBookingById = async (req, res, next) => {
       throw new AppError('Not authorized to view this booking', 403);
     }
 
-    // Get driver rating if driver is assigned
-    let driverRating = null;
-    if (booking.driverId) {
-      const ratings = await Rating.find({ driverId: booking.driverId._id });
-      if (ratings.length > 0) {
-        driverRating = Math.round(
-          (ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length) * 10
-        ) / 10;
-      }
-    }
-
     res.status(200).json({
       success: true,
-      data: formatBookingResponse(booking, driverRating)
+      booking: {
+        _id: booking._id,
+        cartId: booking.cartId,
+        pickupDateTime: booking.pickupDateTime,
+        dropoffDateTime: booking.dropoffDateTime,
+        estimatedDuration: booking.estimatedDuration,
+        cartPrice: booking.cartPrice,
+        totalPrice: booking.totalPrice,
+        status: booking.status,
+        specialRequests: booking.specialRequests,
+        notes: booking.notes,
+        driverId: booking.driverId,
+        completedAt: booking.completedAt,
+        cancelledAt: booking.cancelledAt
+      }
     });
   } catch (error) {
     next(error);
@@ -210,7 +260,21 @@ export const cancelBooking = async (req, res, next) => {
     res.status(200).json({
       success: true,
       message: 'Booking cancelled successfully',
-      data: formatBookingResponse(booking)
+      booking: {
+        _id: booking._id,
+        cartId: booking.cartId,
+        pickupDateTime: booking.pickupDateTime,
+        dropoffDateTime: booking.dropoffDateTime,
+        estimatedDuration: booking.estimatedDuration,
+        cartPrice: booking.cartPrice,
+        totalPrice: booking.totalPrice,
+        status: booking.status,
+        specialRequests: booking.specialRequests,
+        notes: booking.notes,
+        driverId: booking.driverId,
+        completedAt: booking.completedAt,
+        cancelledAt: booking.cancelledAt
+      }
     });
   } catch (error) {
     next(error);
@@ -253,15 +317,26 @@ export const updateBookingStatus = async (req, res, next) => {
     if (notes) booking.notes = notes;
 
     booking = await booking.save();
-    await booking.populate([
-      { path: 'cartId', select: 'name seats price type' },
-      { path: 'driverId', select: 'name email' }
-    ]);
+    await booking.populate('cartId', 'name seats price type');
 
     res.status(200).json({
       success: true,
       message: 'Booking updated successfully',
-      data: formatBookingResponse(booking)
+      booking: {
+        _id: booking._id,
+        cartId: booking.cartId,
+        pickupDateTime: booking.pickupDateTime,
+        dropoffDateTime: booking.dropoffDateTime,
+        estimatedDuration: booking.estimatedDuration,
+        cartPrice: booking.cartPrice,
+        totalPrice: booking.totalPrice,
+        status: booking.status,
+        specialRequests: booking.specialRequests,
+        notes: booking.notes,
+        driverId: booking.driverId,
+        completedAt: booking.completedAt,
+        cancelledAt: booking.cancelledAt
+      }
     });
   } catch (error) {
     next(error);
@@ -276,15 +351,27 @@ export const getAllBookings = async (req, res, next) => {
     const bookings = await Booking.find()
       .populate('userId', 'name email')
       .populate('cartId', 'name seats price type')
-      .populate('driverId', 'name email')
       .sort('-createdAt');
 
     res.status(200).json({
       success: true,
-      data: {
-        total: bookings.length,
-        bookings: bookings.map(booking => formatBookingMinimal(booking))
-      }
+      count: bookings.length,
+      bookings: bookings.map(booking => ({
+        _id: booking._id,
+        userId: booking.userId,
+        cartId: booking.cartId,
+        pickupDateTime: booking.pickupDateTime,
+        dropoffDateTime: booking.dropoffDateTime,
+        estimatedDuration: booking.estimatedDuration,
+        cartPrice: booking.cartPrice,
+        totalPrice: booking.totalPrice,
+        status: booking.status,
+        specialRequests: booking.specialRequests,
+        notes: booking.notes,
+        driverId: booking.driverId,
+        completedAt: booking.completedAt,
+        cancelledAt: booking.cancelledAt
+      }))
     });
   } catch (error) {
     next(error);
@@ -360,14 +447,15 @@ export const assignDriverToBooking = async (req, res, next) => {
     await booking.save();
 
     booking = await booking.populate([
-      { path: 'cartId', select: 'name seats price type' },
+      { path: 'userId', select: 'name email' },
+      { path: 'cartId', select: 'name price' },
       { path: 'driverId', select: 'name email' }
     ]);
 
     res.status(200).json({
       success: true,
       message: 'Driver assigned to booking successfully',
-      data: formatBookingResponse(booking)
+      booking
     });
   } catch (error) {
     next(error);
@@ -403,14 +491,15 @@ export const acceptBooking = async (req, res, next) => {
     await booking.save();
 
     booking = await booking.populate([
-      { path: 'cartId', select: 'name seats price type' },
+      { path: 'userId', select: 'name email' },
+      { path: 'cartId', select: 'name price' },
       { path: 'driverId', select: 'name email' }
     ]);
 
     res.status(200).json({
       success: true,
       message: 'Booking accepted successfully',
-      data: formatBookingResponse(booking)
+      booking
     });
   } catch (error) {
     next(error);
@@ -446,14 +535,15 @@ export const startTrip = async (req, res, next) => {
     await booking.save();
 
     booking = await booking.populate([
-      { path: 'cartId', select: 'name seats price type' },
+      { path: 'userId', select: 'name email' },
+      { path: 'cartId', select: 'name price' },
       { path: 'driverId', select: 'name email' }
     ]);
 
     res.status(200).json({
       success: true,
       message: 'Trip started successfully',
-      data: formatBookingResponse(booking)
+      booking
     });
   } catch (error) {
     next(error);
@@ -493,14 +583,15 @@ export const completeTrip = async (req, res, next) => {
     await booking.save();
 
     booking = await booking.populate([
-      { path: 'cartId', select: 'name seats price type' },
+      { path: 'userId', select: 'name email' },
+      { path: 'cartId', select: 'name price' },
       { path: 'driverId', select: 'name email' }
     ]);
 
     res.status(200).json({
       success: true,
       message: 'Trip completed successfully',
-      data: formatBookingResponse(booking)
+      booking
     });
   } catch (error) {
     next(error);

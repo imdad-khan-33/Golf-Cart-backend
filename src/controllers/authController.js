@@ -227,7 +227,7 @@ export const resendOTP = async (req, res, next) => {
 // @access  Public
 export const login = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, loginType } = req.body;
 
     // Validation
     if (!email || !password) {
@@ -247,6 +247,13 @@ export const login = async (req, res, next) => {
       throw new AppError('Account is not active', 401);
     }
 
+    // Check if loginType matches user role
+    if (loginType !== user.role) {
+      throw new AppError(
+        `This is a ${user.role} account. Please use the ${user.role} login tab.`,
+        403
+      );
+    }
 
     // Check password
     const isMatch = await user.comparePassword(password);
