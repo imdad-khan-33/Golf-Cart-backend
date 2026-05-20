@@ -35,7 +35,7 @@ export const forgotPasswordSchema = z.object({
 export const verifyOTPSchema = z.object({
   body: z.object({
     email: z.string().email('Invalid email format'),
-    otp: z.string().length(6, 'OTP must be exactly 6 digits')
+    otp: z.string().length(4, 'OTP must be exactly 4 digits')
   })
 });
 
@@ -48,7 +48,7 @@ export const resendOTPSchema = z.object({
 export const resetPasswordSchema = z.object({
   body: z.object({
     email: z.string().email('Invalid email format'),
-    otp: z.string().length(6, 'OTP must be exactly 6 digits'),
+    otp: z.string().length(4, 'OTP must be exactly 4 digits'),
     newPassword: z.string().min(6, 'Password must be at least 6 characters')
   })
 });
@@ -63,6 +63,35 @@ export const deleteAccountSchema = z.object({
   body: z.object({
     email: z.string().email('Invalid email format'),
     password: z.string().min(1, 'Password is required')
+  })
+});
+
+export const driverRegisterSchema = z.object({
+  body: z.object({
+    name: z.string().min(2, 'Name must be at least 2 characters'),
+    phoneNumber: z.string().regex(
+      /^\+[1-9]\d{1,14}$/,
+      'Phone number must be in E.164 format (e.g., +1234567890)'
+    )
+  })
+});
+
+export const driverLoginRequestSchema = z.object({
+  body: z.object({
+    phoneNumber: z.string().regex(
+      /^\+[1-9]\d{1,14}$/,
+      'Phone number must be in E.164 format (e.g., +1234567890)'
+    )
+  })
+});
+
+export const driverVerifyOTPSchema = z.object({
+  body: z.object({
+    phoneNumber: z.string().regex(
+      /^\+[1-9]\d{1,14}$/,
+      'Phone number must be in E.164 format (e.g., +1234567890)'
+    ),
+    otp: z.string().length(4, 'OTP must be exactly 4 digits')
   })
 });
 

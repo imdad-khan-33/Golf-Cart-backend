@@ -11,23 +11,31 @@ const userSchema = new mongoose.Schema(
     },
     email: {
       type: String,
-      required: [true, 'Please provide an email'],
-      unique: true,
+      default: null,
       lowercase: true,
+      sparse: true,
       match: [
         /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/,
         'Please provide a valid email'
       ]
     },
+    phoneNumber: {
+      type: String,
+      default: null,
+      sparse: true,
+      unique: true,
+      match: [
+        /^\+[1-9]\d{1,14}$/,
+        'Please provide a valid phone number with country code (e.g., +1234567890)'
+      ]
+    },
     password: {
       type: String,
-      required: [true, 'Please provide a password'],
+      required: function() {
+        return this.role !== 'driver';
+      },
       minlength: 6,
       select: false // Don't return password in queries by default
-    },
-    phone: {
-      type: String,
-      default: null
     },
     profileImage: {
       type: String,

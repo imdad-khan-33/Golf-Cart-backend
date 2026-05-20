@@ -4,6 +4,9 @@ import {
   verifyRegisterOTP,
   resendOTP,
   login,
+  registerDriver,
+  sendDriverLoginOTP,
+  verifyDriverLoginOTP,
   forgotPassword,
   verifyOTP,
   resetPassword,
@@ -22,6 +25,9 @@ import {
   verifyOTPSchema,
   resendOTPSchema,
   resetPasswordSchema,
+  driverRegisterSchema,
+  driverLoginRequestSchema,
+  driverVerifyOTPSchema,
   uploadProfilePictureSchema,
   deleteAccountSchema
 } from '../validators/validationSchemas.js';
@@ -30,9 +36,12 @@ const router = express.Router();
 
 // Public routes
 router.post('/register', validate(registerSchema), register);
+router.post('/driver/register', validate(driverRegisterSchema), registerDriver);
 router.post('/verify-register-otp', validate(verifyOTPSchema), verifyRegisterOTP);
 router.post('/resend-otp', validate(resendOTPSchema), resendOTP);
 router.post('/login', validate(loginSchema), login);
+router.post('/driver/login', validate(driverLoginRequestSchema), sendDriverLoginOTP);
+router.post('/driver/verify-otp', validate(driverVerifyOTPSchema), verifyDriverLoginOTP);
 router.post('/forgot-password', validate(forgotPasswordSchema), forgotPassword);
 router.post('/verify-otp', validate(verifyOTPSchema), verifyOTP);
 

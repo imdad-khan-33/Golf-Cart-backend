@@ -4,6 +4,7 @@ import Booking from '../models/Booking.js';
 import { generateToken, generateRefreshToken, generateResetToken } from '../utils/tokenUtils.js';
 import { generateOTP, getOTPExpiryTime, isOTPExpired } from '../utils/otpUtils.js';
 import { sendOTPEmail, sendResetPasswordEmail } from '../utils/emailService.js';
+import { sendOTPToPhone } from '../utils/twilioService.js';
 import { formatUserResponse } from '../utils/userFormatter.js';
 import { AppError } from '../middleware/errorHandler.js';
 
@@ -217,6 +218,169 @@ export const resendOTP = async (req, res, next) => {
     }
 
     res.status(200).json(response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Register driver (no admin check)
+// @route   POST /api/auth/driver/register
+// @access  Public
+export const registerDriver = async (req, res, next) => {
+  try {
+    const { name, phoneNumber } = req.body;
+
+    if (!name || !phoneNumber) {
+      throw new AppError('Please provide name and phone number', 400);
+    }
+
+    const existing = await User.findOne({ phoneNumber });
+
+    if (existing) {
+      throw new AppError('Phone number already registered', 400);
+    }
+
+    const driver = new User({
+      name,
+      phoneNumber,
+      role: 'driver',
+      isVerified: true,
+      isActive: true
+    });
+
+    await driver.save();
+
+    res.status(201).json({
+      success: true,
+      message: 'Driver registered successfully',
+      user: formatUserResponse(driver)
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Send OTP to driver phone for login
+// @route   POST /api/auth/driver/login
+// @access  Public
+export const sendDriverLoginOTP = async (req, res, next) => {
+  try {
+    const { phoneNumber } = req.body;
+
+    if (!phoneNumber) {
+      throw new AppError('Please provide phone number', 400);
+    }
+
+    const driver = await User.findOne({ phoneNumber, role: 'driver' }).select(
+      '+otp +otpExpires +otpAttempts'
+    );
+
+    if (!driver) {
+      throw new AppError('Driver not found', 404);
+    }
+
+    if (!driver.isActive) {
+      throw new AppError('Account is not active', 401);
+    }
+
+    const otp = generateOTP();
+    driver.otp = otp;
+    driver.otpExpires = getOTPExpiryTime();
+    driver.otpAttempts = 0;
+
+    await driver.save();
+
+    try {
+      await sendOTPToPhone(phoneNumber, otp);
+      console.log(`[DRIVER-LOGIN] OTP sent to ${phoneNumber}`);
+    } catch (smsError) {
+      console.error('[DRIVER-LOGIN] SMS send failed:', smsError.message);
+      driver.otp = null;
+      driver.otpExpires = null;
+      driver.otpAttempts = 0;
+      await driver.save();
+      throw new AppError('Failed to send OTP. Please try again.', 500);
+    }
+
+    const response = {
+      success: true,
+      message: 'OTP sent to your phone number',
+      phoneNumber
+    };
+
+    if (process.env.NODE_ENV === 'development') {
+      response.otp = otp;
+      response.testingNote = 'OTP is shown for testing purposes only. In production, this will not be visible.';
+    }
+
+    res.status(200).json(response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Verify driver login OTP
+// @route   POST /api/auth/driver/verify-otp
+// @access  Public
+export const verifyDriverLoginOTP = async (req, res, next) => {
+  try {
+    const { phoneNumber, otp } = req.body;
+
+    if (!phoneNumber || !otp) {
+      throw new AppError('Please provide phone number and OTP', 400);
+    }
+
+    const driver = await User.findOne({ phoneNumber, role: 'driver' }).select(
+      '+otp +otpExpires +otpAttempts'
+    );
+
+    if (!driver) {
+      throw new AppError('Driver not found', 404);
+    }
+
+    if (!driver.otp) {
+      throw new AppError('OTP not found. Request a new one', 400);
+    }
+
+    if (isOTPExpired(driver.otpExpires)) {
+      driver.otp = null;
+      driver.otpExpires = null;
+      driver.otpAttempts = 0;
+      await driver.save();
+      throw new AppError('OTP has expired. Request a new one', 400);
+    }
+
+    if (driver.otpAttempts >= parseInt(process.env.MAX_OTP_ATTEMPTS || 5)) {
+      driver.otp = null;
+      driver.otpExpires = null;
+      driver.otpAttempts = 0;
+      await driver.save();
+      throw new AppError('Too many OTP attempts. Request a new one', 400);
+    }
+
+    if (driver.otp !== otp) {
+      driver.otpAttempts += 1;
+      await driver.save();
+      throw new AppError('Invalid OTP', 400);
+    }
+
+    driver.otp = null;
+    driver.otpExpires = null;
+    driver.otpAttempts = 0;
+    driver.isVerified = true;
+    driver.lastLogin = new Date();
+    await driver.save();
+
+    const token = generateToken(driver._id);
+    const refreshToken = generateRefreshToken(driver._id);
+
+    res.status(200).json({
+      success: true,
+      message: 'Login successful',
+      token,
+      refreshToken,
+      user: formatUserResponse(driver)
+    });
   } catch (error) {
     next(error);
   }
