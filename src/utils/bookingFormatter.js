@@ -83,6 +83,7 @@ export const formatBookingResponse = (booking, driverRating = null) => {
       dateTime: formatTimestamp(bookingObj.dropoffDateTime),
       location: formatLocation(bookingObj.dropoffLocation)
     },
+    driverLocation: bookingObj.driverLocation || null,
     duration: {
       minutes: bookingObj.estimatedDuration,
       hours: Math.ceil(bookingObj.estimatedDuration / 60)
@@ -126,6 +127,7 @@ export const formatBookingMinimal = (booking, driverRating = null) => {
       dateTime: formatTimestamp(bookingObj.dropoffDateTime),
       location: formatLocation(bookingObj.dropoffLocation)
     },
+    driverLocation: bookingObj.driverLocation || null,
     pricing: {
       totalPrice: bookingObj.totalPrice
     },

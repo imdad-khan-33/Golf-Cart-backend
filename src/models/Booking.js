@@ -105,6 +105,31 @@ const bookingSchema = new mongoose.Schema(
         }
       },
       default: null
+    },
+    driverLocation: {
+      type: {
+        latitude: {
+          type: Number,
+          required: true
+        },
+        longitude: {
+          type: Number,
+          required: true
+        },
+        heading: {
+          type: Number,
+          default: null
+        },
+        speed: {
+          type: Number,
+          default: null
+        },
+        updatedAt: {
+          type: Date,
+          default: null
+        }
+      },
+      default: null
     }
   },
   { timestamps: true }

@@ -4,14 +4,17 @@ dotenv.config();
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+import http from 'http';
 import connectDB from './config/database.js';
 import authRoutes from './routes/authRoutes.js';
 import cartRoutes from './routes/cartRoutes.js';
 import bookingRoutes from './routes/bookingRoutes.js';
 import ratingRoutes from './routes/ratingRoutes.js';
 import { errorHandler } from './middleware/errorHandler.js';
+import { initSocket } from './socket/index.js';
 
 const app = express();
+const httpServer = http.createServer(app);
 
 // Connect to Database
 connectDB();
@@ -53,7 +56,9 @@ app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
+initSocket(httpServer);
+
+httpServer.listen(PORT, () => {
   console.log(`Golf Cart API Server running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV}`);
 });
