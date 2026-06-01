@@ -25,12 +25,12 @@ export const sendOTPEmail = async (email, otp, userName) => {
   const mailOptions = {
     from: process.env.EMAIL_USER,
     to: email,
-    subject: `Golf Cart - OTP Verification (${Math.floor(1000 + Math.random() * 9000)})`,
+    subject: `${otp} is your Golf Cart Verification Code`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #333;">Welcome to Golf Cart!</h2>
         <p>Hi ${userName},</p>
-        <p>Your OTP for password reset is:</p>
+        <p>Your Golf Cart verification code is:</p>
         <h1 style="color: #007bff; font-size: 36px; letter-spacing: 5px;">${otp}</h1>
         <p>This OTP will expire in 5 minutes.</p>
         <p style="color: #666; font-size: 12px;">If you didn't request this, please ignore this email.</p>

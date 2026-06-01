@@ -5,6 +5,10 @@ export const registerSchema = z.object({
   body: z.object({
     name: z.string().min(2, 'Name must be at least 2 characters'),
     email: z.string().email('Invalid email format'),
+    phoneNumber: z.string().regex(
+      /^\+[1-9]\d{1,14}$/,
+      'Phone number must be in E.164 format (e.g., +1234567890)'
+    ).optional(),
     password: z.string().min(6, 'Password must be at least 6 characters'),
     confirmPassword: z.string().min(6, 'Confirm password is required'),
     role: z.enum(['user', 'driver'], {
@@ -35,7 +39,7 @@ export const forgotPasswordSchema = z.object({
 export const verifyOTPSchema = z.object({
   body: z.object({
     email: z.string().email('Invalid email format'),
-    otp: z.string().length(4, 'OTP must be exactly 4 digits')
+    otp: z.string().length(6, 'OTP must be exactly 6 digits')
   })
 });
 
@@ -48,7 +52,7 @@ export const resendOTPSchema = z.object({
 export const resetPasswordSchema = z.object({
   body: z.object({
     email: z.string().email('Invalid email format'),
-    otp: z.string().length(4, 'OTP must be exactly 4 digits'),
+    otp: z.string().length(6, 'OTP must be exactly 6 digits'),
     newPassword: z.string().min(6, 'Password must be at least 6 characters')
   })
 });
@@ -91,7 +95,7 @@ export const driverVerifyOTPSchema = z.object({
       /^\+[1-9]\d{1,14}$/,
       'Phone number must be in E.164 format (e.g., +1234567890)'
     ),
-    otp: z.string().length(4, 'OTP must be exactly 4 digits')
+    otp: z.string().length(6, 'OTP must be exactly 6 digits')
   })
 });
 

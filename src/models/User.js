@@ -11,7 +11,6 @@ const userSchema = new mongoose.Schema(
     },
     email: {
       type: String,
-      default: null,
       lowercase: true,
       sparse: true,
       match: [
@@ -21,7 +20,6 @@ const userSchema = new mongoose.Schema(
     },
     phoneNumber: {
       type: String,
-      default: null,
       sparse: true,
       unique: true,
       match: [

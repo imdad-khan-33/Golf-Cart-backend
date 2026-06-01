@@ -13,7 +13,7 @@ import { AppError } from '../middleware/errorHandler.js';
 // @access  Public
 export const register = async (req, res, next) => {
   try {
-    const { name, email, password, confirmPassword, role } = req.body;
+    const { name, email, phoneNumber, password, confirmPassword, role } = req.body;
 
     // Validation
     if (!name || !email || !password || !confirmPassword) {
@@ -28,10 +28,18 @@ export const register = async (req, res, next) => {
       throw new AppError('Password must be at least 6 characters', 400);
     }
 
-    // Check if user already exists
+    // Check if email already exists
     let user = await User.findOne({ email });
     if (user && user.isVerified) {
       throw new AppError('Email already registered', 400);
+    }
+
+    // Check if phone number already exists (if provided)
+    if (phoneNumber) {
+      const phoneUser = await User.findOne({ phoneNumber });
+      if (phoneUser && phoneUser.isVerified) {
+        throw new AppError('Phone number already registered', 400);
+      }
     }
 
     // Delete unverified user if exists (for retry)
@@ -48,6 +56,10 @@ export const register = async (req, res, next) => {
       isVerified: false,
       isActive: false
     });
+
+    if (phoneNumber) {
+      user.phoneNumber = phoneNumber;
+    }
 
     await user.save();
 
