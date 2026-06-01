@@ -1,7 +1,3 @@
-/**
- * Real-Time Notification Service
- * Handles all socket.io emissions for real-time updates
- */
 
 export const notificationService = {
   /**
