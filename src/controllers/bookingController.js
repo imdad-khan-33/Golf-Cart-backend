@@ -3,6 +3,7 @@ import Cart from '../models/Cart.js';
 import Rating from '../models/Rating.js';
 import User from '../models/User.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { notificationService } from '../utils/notificationService.js';
 
 // @desc    Create booking
 // @route   POST /api/bookings
@@ -52,6 +53,23 @@ export const createBooking = async (req, res, next) => {
     });
 
     const populatedBooking = await booking.populate('cartId', 'name seats price type');
+
+    // Emit new booking notification to admins
+    const io = req.app.locals.io;
+    if (io) {
+      notificationService.sendNewBooking(io, {
+        _id: populatedBooking._id,
+        userId: req.user._id,
+        userName: req.user.name,
+        cartId: populatedBooking.cartId._id,
+        cartName: populatedBooking.cartId.name,
+        pickupDateTime: populatedBooking.pickupDateTime,
+        pickupLocation: populatedBooking.pickupLocation,
+        status: populatedBooking.status,
+        totalPrice: populatedBooking.totalPrice,
+        createdAt: populatedBooking.createdAt
+      });
+    }
 
     res.status(201).json({
       success: true,
@@ -264,6 +282,19 @@ export const cancelBooking = async (req, res, next) => {
 
     await booking.populate('cartId', 'name seats price type');
 
+    // Emit booking cancelled event
+    const io = req.app.locals.io;
+    if (io) {
+      notificationService.sendBookingCancelled(io, {
+        _id: booking._id,
+        driverId: booking.driverId,
+        status: booking.status,
+        cancelledAt: booking.cancelledAt,
+        cancelledBy: 'user',
+        reason: 'User cancelled'
+      });
+    }
+
     res.status(200).json({
       success: true,
       message: 'Booking cancelled successfully',
@@ -444,6 +475,11 @@ export const assignDriverToBooking = async (req, res, next) => {
       throw new AppError('Booking not found', 404);
     }
 
+    // Check if already assigned to someone
+    if (booking.driverId) {
+      throw new AppError('Booking is already assigned to a driver', 400);
+    }
+
     // Verify driver exists
     const driver = await User.findById(driverId);
     if (!driver) {
@@ -466,6 +502,25 @@ export const assignDriverToBooking = async (req, res, next) => {
       { path: 'driverId', select: 'name email' }
     ]);
 
+    // Emit booking assigned event to driver
+    const io = req.app.locals.io;
+    if (io) {
+      notificationService.sendBookingAssigned(io, {
+        _id: booking._id,
+        driverId: booking.driverId._id,
+        driverName: booking.driverId.name,
+        cartId: booking.cartId._id,
+        cartName: booking.cartId.name,
+        pickupLocation: booking.pickupLocation,
+        pickupDateTime: booking.pickupDateTime,
+        dropoffLocation: booking.dropoffLocation,
+        dropoffDateTime: booking.dropoffDateTime,
+        totalPrice: booking.totalPrice,
+        specialRequests: booking.specialRequests,
+        status: booking.status
+      });
+    }
+
     res.status(200).json({
       success: true,
       message: 'Driver assigned to booking successfully',
@@ -482,6 +537,7 @@ export const assignDriverToBooking = async (req, res, next) => {
 export const acceptBooking = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const driverId = req.user._id;
 
     // Verify booking exists
     let booking = await Booking.findById(id);
@@ -490,25 +546,59 @@ export const acceptBooking = async (req, res, next) => {
     }
 
     // Check if driver is assigned to this booking
-    if (!booking.driverId || booking.driverId.toString() !== req.user._id.toString()) {
+    if (!booking.driverId || booking.driverId.toString() !== driverId.toString()) {
       throw new AppError('Not assigned to this booking', 403);
     }
 
-    // Check booking status
+    // Check if already accepted by this driver
+    if (booking.driverAcceptedAt) {
+      throw new AppError('You have already accepted this booking', 400);
+    }
+
+    // Check booking status - must be Confirmed
     if (booking.status !== 'Confirmed') {
       throw new AppError(`Booking must be Confirmed to accept. Current status: ${booking.status}`, 400);
     }
 
-    // Accept booking and mark as Active
-    booking.status = 'Active';
-    booking.driverAcceptedAt = new Date();
-    await booking.save();
+    // ATOMIC UPDATE: Update only if conditions still match (prevent race condition)
+    // This ensures only ONE driver can accept
+    const updatedBooking = await Booking.findByIdAndUpdate(
+      id,
+      {
+        $set: {
+          status: 'Active',
+          driverAcceptedAt: new Date()
+        }
+      },
+      {
+        new: true,
+        // Only update if these conditions are still true
+        runValidators: true
+      }
+    );
 
-    booking = await booking.populate([
+    // Verify the update actually happened with our conditions
+    if (!updatedBooking) {
+      throw new AppError('Failed to accept booking', 500);
+    }
+
+    booking = await updatedBooking.populate([
       { path: 'userId', select: 'name email' },
       { path: 'cartId', select: 'name price' },
       { path: 'driverId', select: 'name email' }
     ]);
+
+    // Emit booking accepted event
+    const io = req.app.locals.io;
+    if (io) {
+      notificationService.sendBookingAccepted(io, {
+        _id: booking._id,
+        driverId: booking.driverId._id,
+        driverName: booking.driverId.name,
+        status: booking.status,
+        driverAcceptedAt: booking.driverAcceptedAt
+      });
+    }
 
     res.status(200).json({
       success: true,
@@ -553,6 +643,19 @@ export const startTrip = async (req, res, next) => {
       { path: 'cartId', select: 'name price' },
       { path: 'driverId', select: 'name email' }
     ]);
+
+    // Emit trip started event
+    const io = req.app.locals.io;
+    if (io) {
+      notificationService.sendTripStarted(io, {
+        _id: booking._id,
+        driverId: booking.driverId._id,
+        driverName: booking.driverId.name,
+        status: booking.status,
+        tripStartedAt: booking.tripStartedAt,
+        pickupDateTime: booking.pickupDateTime
+      });
+    }
 
     res.status(200).json({
       success: true,
@@ -601,6 +704,21 @@ export const completeTrip = async (req, res, next) => {
       { path: 'cartId', select: 'name price' },
       { path: 'driverId', select: 'name email' }
     ]);
+
+    // Emit trip completed event
+    const io = req.app.locals.io;
+    if (io) {
+      notificationService.sendTripCompleted(io, {
+        _id: booking._id,
+        driverId: booking.driverId._id,
+        driverName: booking.driverId.name,
+        status: booking.status,
+        completedAt: booking.completedAt,
+        totalPrice: booking.totalPrice,
+        estimatedDuration: booking.estimatedDuration,
+        notes: booking.notes
+      });
+    }
 
     res.status(200).json({
       success: true,

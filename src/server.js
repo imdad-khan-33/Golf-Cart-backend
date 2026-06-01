@@ -29,6 +29,10 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser()); // Parse cookies for HTTP-only refresh tokens
 
+// Initialize Socket.io
+const io = initSocket(httpServer);
+app.locals.io = io; // Make io accessible to routes
+
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/carts', cartRoutes);
@@ -55,8 +59,6 @@ app.use((req, res) => {
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
-
-initSocket(httpServer);
 
 httpServer.listen(PORT, () => {
   console.log(`Golf Cart API Server running on port ${PORT}`);

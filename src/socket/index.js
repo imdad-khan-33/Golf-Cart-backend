@@ -2,6 +2,7 @@ import { Server } from 'socket.io';
 import { verifyToken } from '../utils/tokenUtils.js';
 import User from '../models/User.js';
 import Booking from '../models/Booking.js';
+import { notificationService } from '../utils/notificationService.js';
 
 export const initSocket = (httpServer) => {
   const io = new Server(httpServer, {
@@ -63,6 +64,14 @@ export const initSocket = (httpServer) => {
       socket.leave(`driver:${driverId}`);
     });
 
+    socket.on('join:admin', () => {
+      socket.join('admin:notifications');
+    });
+
+    socket.on('leave:admin', () => {
+      socket.leave('admin:notifications');
+    });
+
     socket.on('driver:location', async (payload) => {
       try {
         if (socket.data.user?.role !== 'driver') return;
@@ -93,14 +102,16 @@ export const initSocket = (httpServer) => {
           $set: { driverLocation: location }
         });
 
-        const eventPayload = {
+        // Use notification service to broadcast location
+        notificationService.sendLocationUpdate(io, {
           bookingId,
           driverId: resolvedDriverId,
-          ...location
-        };
-
-        io.to(`booking:${bookingId}`).emit('driver:location', eventPayload);
-        io.to(`driver:${resolvedDriverId}`).emit('driver:location', eventPayload);
+          latitude,
+          longitude,
+          heading,
+          speed,
+          updatedAt: location.updatedAt
+        });
       } catch (error) {
         console.error('[SOCKET] driver:location error:', error.message);
       }
