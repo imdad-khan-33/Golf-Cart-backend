@@ -216,6 +216,9 @@ export const notificationService = {
       io.to(`driver:${bookingData.driverId}`).emit('booking:cancelled', payload);
     }
 
+    // Notify available drivers too, so pending/offered bookings disappear in real time
+    io.to('drivers:available').emit('booking:cancelled', payload);
+
     // Notify admin
     io.to('admin:notifications').emit('booking:cancelled', {
       bookingId: bookingData._id,
