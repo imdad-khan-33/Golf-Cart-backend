@@ -5,6 +5,7 @@ import {
   getBookingById,
   cancelBooking,
   updateBookingStatus,
+  updateDriverLocation,
   getAllBookings,
   getBookingStats,
   assignDriverToBooking,
@@ -17,7 +18,8 @@ import { validate } from '../middleware/validationMiddleware.js';
 import {
   createBookingSchema,
   updateBookingStatusSchema,
-  bookingByIdSchema
+  bookingByIdSchema,
+  driverLocationSchema
 } from '../validators/validationSchemas.js';
 
 const router = express.Router();
@@ -35,13 +37,16 @@ router.put('/:id/accept', authorize('driver'), acceptBooking);
 router.put('/:id/start-trip', authorize('driver'), startTrip);
 router.put('/:id/complete-trip', authorize('driver'), completeTrip);
 
+// Driver location update via HTTP
+router.put('/:id/driver-location', authorize('driver'), validate(driverLocationSchema), updateDriverLocation);
+
 // User routes
 router.post('/', validate(createBookingSchema), createBooking);
 router.get('/', getUserBookings);
 router.get('/:id', validate(bookingByIdSchema), getBookingById);
 router.post('/:id/cancel', validate(bookingByIdSchema), cancelBooking);
 
-// Admin routes
+// Admin/Driver general update (driver arrival, status changes, etc.)
 router.put('/:id', authorize('driver'), validate(updateBookingStatusSchema), updateBookingStatus);
 
 export default router;

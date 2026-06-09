@@ -12,13 +12,11 @@ export const createBooking = async (req, res, next) => {
   try {
     const { cartId, pickupDateTime, dropoffDateTime, specialRequests, pickupLocation, dropoffLocation } = req.body;
 
-    // Verify cart exists
     const cart = await Cart.findById(cartId);
     if (!cart) {
       throw new AppError('Cart not found', 404);
     }
 
-    // Validate dates
     const pickupDate = new Date(pickupDateTime);
     const dropoffDate = new Date(dropoffDateTime);
     const now = new Date();
@@ -31,13 +29,11 @@ export const createBooking = async (req, res, next) => {
       throw new AppError('Dropoff date must be after pickup date', 400);
     }
 
-    // Calculate duration in hours and total price
     const durationMs = dropoffDate - pickupDate;
     const durationMinutes = Math.ceil(durationMs / (1000 * 60));
     const durationHours = Math.ceil(durationMinutes / 60);
     const totalPrice = cart.price * durationHours;
 
-    // Create booking
     const booking = await Booking.create({
       userId: req.user._id,
       cartId,
@@ -54,7 +50,6 @@ export const createBooking = async (req, res, next) => {
 
     const populatedBooking = await booking.populate('cartId', 'name seats price type');
 
-    // Emit new booking notification to admins
     const io = req.app.locals.io;
     if (io) {
       notificationService.sendNewBooking(io, {
@@ -65,8 +60,11 @@ export const createBooking = async (req, res, next) => {
         cartName: populatedBooking.cartId.name,
         pickupDateTime: populatedBooking.pickupDateTime,
         pickupLocation: populatedBooking.pickupLocation,
+        dropoffDateTime: populatedBooking.dropoffDateTime,
+        dropoffLocation: populatedBooking.dropoffLocation,
         status: populatedBooking.status,
         totalPrice: populatedBooking.totalPrice,
+        specialRequests: populatedBooking.specialRequests,
         createdAt: populatedBooking.createdAt
       });
     }
@@ -89,6 +87,7 @@ export const createBooking = async (req, res, next) => {
         specialRequests: populatedBooking.specialRequests,
         notes: populatedBooking.notes,
         driverId: populatedBooking.driverId,
+        driverArrivedAt: populatedBooking.driverArrivedAt,
         completedAt: populatedBooking.completedAt,
         cancelledAt: populatedBooking.cancelledAt
       }
@@ -98,30 +97,21 @@ export const createBooking = async (req, res, next) => {
   }
 };
 
-// @desc    Get user's bookings
-// @route   GET /api/bookings
-// @access  Private
-// Helper function to get driver average rating
+// Helper: get driver average rating
 const getDriverRating = async (driverId) => {
   try {
     const ratings = await Rating.find({ driverId });
     if (ratings.length === 0) return 0;
     const avgRating = ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length;
-    return Math.round(avgRating * 10) / 10; // Round to 1 decimal place
+    return Math.round(avgRating * 10) / 10;
   } catch (error) {
     return 0;
   }
 };
 
-// Helper function to group bookings by date
+// Helper: group bookings by date
 const groupByDate = (bookings) => {
-  const grouped = {
-    Today: [],
-    Yesterday: [],
-    'This Week': [],
-    Older: []
-  };
-
+  const grouped = { Today: [], Yesterday: [], 'This Week': [], Older: [] };
   const today = new Date();
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
@@ -129,16 +119,16 @@ const groupByDate = (bookings) => {
   weekAgo.setDate(weekAgo.getDate() - 7);
 
   bookings.forEach(booking => {
-    const bookingDate = new Date(booking.createdAt);
-    const bookingDateOnly = new Date(bookingDate.getFullYear(), bookingDate.getMonth(), bookingDate.getDate());
-    const todayDateOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const yesterdayDateOnly = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate());
+    const d = new Date(booking.createdAt);
+    const bd = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const td = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const yd = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate());
 
-    if (bookingDateOnly.getTime() === todayDateOnly.getTime()) {
+    if (bd.getTime() === td.getTime()) {
       grouped.Today.push(booking);
-    } else if (bookingDateOnly.getTime() === yesterdayDateOnly.getTime()) {
+    } else if (bd.getTime() === yd.getTime()) {
       grouped.Yesterday.push(booking);
-    } else if (bookingDateOnly > weekAgo) {
+    } else if (bd > weekAgo) {
       grouped['This Week'].push(booking);
     } else {
       grouped.Older.push(booking);
@@ -148,6 +138,9 @@ const groupByDate = (bookings) => {
   return grouped;
 };
 
+// @desc    Get user's bookings
+// @route   GET /api/bookings
+// @access  Private
 export const getUserBookings = async (req, res, next) => {
   try {
     const bookings = await Booking.find({ userId: req.user._id })
@@ -155,14 +148,12 @@ export const getUserBookings = async (req, res, next) => {
       .populate('driverId', 'name email')
       .sort('-createdAt');
 
-    // Get ratings for each driver
     const bookingsWithRatings = await Promise.all(
       bookings.map(async (booking) => {
         let driverRating = 0;
         if (booking.driverId) {
           driverRating = await getDriverRating(booking.driverId._id);
         }
-
         return {
           _id: booking._id,
           cartId: booking.cartId,
@@ -183,6 +174,7 @@ export const getUserBookings = async (req, res, next) => {
             email: booking.driverId.email,
             rating: driverRating
           } : null,
+          driverArrivedAt: booking.driverArrivedAt,
           completedAt: booking.completedAt,
           cancelledAt: booking.cancelledAt,
           createdAt: booking.createdAt
@@ -190,10 +182,7 @@ export const getUserBookings = async (req, res, next) => {
       })
     );
 
-    // Group bookings by date
     const groupedBookings = groupByDate(bookingsWithRatings);
-
-    // Filter out empty groups and maintain order
     const groupedResult = {};
     ['Today', 'Yesterday', 'This Week', 'Older'].forEach(key => {
       if (groupedBookings[key].length > 0) {
@@ -224,7 +213,6 @@ export const getBookingById = async (req, res, next) => {
       throw new AppError('Booking not found', 404);
     }
 
-    // Check if user owns this booking
     if (booking.userId.toString() !== req.user._id.toString()) {
       throw new AppError('Not authorized to view this booking', 403);
     }
@@ -246,6 +234,7 @@ export const getBookingById = async (req, res, next) => {
         specialRequests: booking.specialRequests,
         notes: booking.notes,
         driverId: booking.driverId,
+        driverArrivedAt: booking.driverArrivedAt,
         completedAt: booking.completedAt,
         cancelledAt: booking.cancelledAt
       }
@@ -260,29 +249,45 @@ export const getBookingById = async (req, res, next) => {
 // @access  Private
 export const cancelBooking = async (req, res, next) => {
   try {
+    const { reason } = req.body;
     let booking = await Booking.findById(req.params.id);
 
     if (!booking) {
       throw new AppError('Booking not found', 404);
     }
 
-    // Check if user owns this booking
     if (booking.userId.toString() !== req.user._id.toString()) {
       throw new AppError('Not authorized to cancel this booking', 403);
     }
 
-    // Can only cancel Pending or Confirmed bookings
-    if (!['Pending', 'Confirmed'].includes(booking.status)) {
-      throw new AppError(`Cannot cancel a ${booking.status} booking`, 400);
+    // Cannot cancel if already terminal
+    if (booking.status === 'Cancelled') {
+      throw new AppError('Booking is already cancelled', 400);
+    }
+    if (booking.status === 'Completed') {
+      throw new AppError('Cannot cancel a completed booking', 400);
+    }
+
+    // Driver is considered arrived if any arrival/trip indicator is set
+    const driverHasArrived =
+      booking.driverArrivedAt != null ||
+      booking.status === 'Arrived' ||
+      booking.tripStartedAt != null ||
+      booking.completedAt != null;
+
+    if (driverHasArrived) {
+      throw new AppError('Cannot cancel after driver has arrived at pickup location', 400);
     }
 
     booking.status = 'Cancelled';
     booking.cancelledAt = new Date();
+    if (reason) {
+      booking.notes = reason;
+    }
     booking = await booking.save();
 
     await booking.populate('cartId', 'name seats price type');
 
-    // Emit booking cancelled event
     const io = req.app.locals.io;
     if (io) {
       notificationService.sendBookingCancelled(io, {
@@ -291,7 +296,7 @@ export const cancelBooking = async (req, res, next) => {
         status: booking.status,
         cancelledAt: booking.cancelledAt,
         cancelledBy: 'user',
-        reason: 'User cancelled'
+        reason: reason || null
       });
     }
 
@@ -312,6 +317,7 @@ export const cancelBooking = async (req, res, next) => {
         specialRequests: booking.specialRequests,
         notes: booking.notes,
         driverId: booking.driverId,
+        driverArrivedAt: booking.driverArrivedAt,
         completedAt: booking.completedAt,
         cancelledAt: booking.cancelledAt
       }
@@ -321,40 +327,85 @@ export const cancelBooking = async (req, res, next) => {
   }
 };
 
-// @desc    Update booking status (Admin)
+// @desc    Update booking status (Admin/Driver)
 // @route   PUT /api/bookings/:id
-// @access  Private/Admin
+// @access  Private/Admin or Driver
 export const updateBookingStatus = async (req, res, next) => {
   try {
-    const { status, notes } = req.body;
+    const { status, notes, driverId, driverArrivedAt, tripStartedAt } = req.body;
 
-    const validStatus = ['Pending', 'Confirmed', 'Active', 'Completed', 'Cancelled'];
+    const validStatus = ['Pending', 'Confirmed', 'Arrived', 'Active', 'Completed', 'Cancelled'];
     if (status && !validStatus.includes(status)) {
       throw new AppError(`Status must be one of: ${validStatus.join(', ')}`, 400);
     }
 
     let booking = await Booking.findById(req.params.id);
-
     if (!booking) {
       throw new AppError('Booking not found', 404);
     }
 
+    // ── Driver arrival detection ──────────────────────────────────────────────
+    // Triggered when:
+    //   - notes contains "Driver arrived", OR
+    //   - status === "Arrived", OR
+    //   - driverArrivedAt is provided in the payload
+    const notesIndicatesArrival = typeof notes === 'string' &&
+      notes.toLowerCase().includes('driver arrived');
+
+    const isArrivalUpdate =
+      notesIndicatesArrival ||
+      status === 'Arrived' ||
+      driverArrivedAt != null;
+
+    if (isArrivalUpdate) {
+      booking.status = 'Arrived';
+      booking.driverArrivedAt = driverArrivedAt ? new Date(driverArrivedAt) : new Date();
+      if (driverId) booking.driverId = driverId;
+      if (notes) booking.notes = notes;
+
+      booking = await booking.save();
+
+      await booking.populate([
+        { path: 'cartId', select: 'name seats price type' },
+        { path: 'driverId', select: 'name email' }
+      ]);
+
+      const io = req.app.locals.io;
+      if (io) {
+        notificationService.sendDriverArrived(io, {
+          _id: booking._id,
+          driverId: booking.driverId?._id || booking.driverId,
+          driverName: booking.driverId?.name || null,
+          driverLocation: booking.driverLocation,
+          pickupLocation: booking.pickupLocation,
+          status: booking.status,
+          driverArrivedAt: booking.driverArrivedAt
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: 'Driver arrived status updated',
+        booking: _formatBooking(booking)
+      });
+    }
+
+    // ── General status update ─────────────────────────────────────────────────
     if (status) {
       booking.status = status;
-      
-      // Set timestamps for status changes
+
       if (status === 'Completed') {
         booking.completedAt = new Date();
-        // Only update driverId if not already set (preserve original driver assignment)
-        if (!booking.driverId) {
-          booking.driverId = req.user._id;
-        }
+        if (!booking.driverId) booking.driverId = req.user._id;
       } else if (status === 'Cancelled') {
         booking.cancelledAt = new Date();
       }
     }
-    
+
     if (notes) booking.notes = notes;
+    if (driverId) booking.driverId = driverId;
+    if (driverArrivedAt) booking.driverArrivedAt = new Date(driverArrivedAt);
+    if (tripStartedAt) booking.tripStartedAt = new Date(tripStartedAt);
 
     booking = await booking.save();
     await booking.populate('cartId', 'name seats price type');
@@ -362,23 +413,56 @@ export const updateBookingStatus = async (req, res, next) => {
     res.status(200).json({
       success: true,
       message: 'Booking updated successfully',
-      booking: {
-        _id: booking._id,
-        cartId: booking.cartId,
-        pickupDateTime: booking.pickupDateTime,
-        dropoffDateTime: booking.dropoffDateTime,
-        pickupLocation: booking.pickupLocation,
-        dropoffLocation: booking.dropoffLocation,
-        estimatedDuration: booking.estimatedDuration,
-        cartPrice: booking.cartPrice,
-        totalPrice: booking.totalPrice,
-        status: booking.status,
-        specialRequests: booking.specialRequests,
-        notes: booking.notes,
-        driverId: booking.driverId,
-        completedAt: booking.completedAt,
-        cancelledAt: booking.cancelledAt
-      }
+      booking: _formatBooking(booking)
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Update driver location via HTTP
+// @route   PUT /api/bookings/:id/driver-location
+// @access  Private (Driver)
+export const updateDriverLocation = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { latitude, longitude, heading = null, speed = null } = req.body;
+
+    let booking = await Booking.findById(id);
+    if (!booking) {
+      throw new AppError('Booking not found', 404);
+    }
+
+    // Only the assigned driver may update location
+    if (!booking.driverId || booking.driverId.toString() !== req.user._id.toString()) {
+      throw new AppError('Not assigned to this booking', 403);
+    }
+
+    if (['Completed', 'Cancelled'].includes(booking.status)) {
+      throw new AppError(`Cannot update location for a ${booking.status} booking`, 400);
+    }
+
+    const location = { latitude, longitude, heading, speed, updatedAt: new Date() };
+    booking.driverLocation = location;
+    await booking.save();
+
+    const io = req.app.locals.io;
+    if (io) {
+      notificationService.sendLocationUpdate(io, {
+        bookingId: booking._id,
+        driverId: req.user._id,
+        latitude,
+        longitude,
+        heading,
+        speed,
+        updatedAt: location.updatedAt
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Driver location updated',
+      driverLocation: location
     });
   } catch (error) {
     next(error);
@@ -398,24 +482,25 @@ export const getAllBookings = async (req, res, next) => {
     res.status(200).json({
       success: true,
       count: bookings.length,
-      bookings: bookings.map(booking => ({
-        _id: booking._id,
-        userId: booking.userId,
-        cartId: booking.cartId,
-        pickupDateTime: booking.pickupDateTime,
-        dropoffDateTime: booking.dropoffDateTime,
-        pickupLocation: booking.pickupLocation,
-        dropoffLocation: booking.dropoffLocation,
-        driverLocation: booking.driverLocation || null,
-        estimatedDuration: booking.estimatedDuration,
-        cartPrice: booking.cartPrice,
-        totalPrice: booking.totalPrice,
-        status: booking.status,
-        specialRequests: booking.specialRequests,
-        notes: booking.notes,
-        driverId: booking.driverId,
-        completedAt: booking.completedAt,
-        cancelledAt: booking.cancelledAt
+      bookings: bookings.map(b => ({
+        _id: b._id,
+        userId: b.userId,
+        cartId: b.cartId,
+        pickupDateTime: b.pickupDateTime,
+        dropoffDateTime: b.dropoffDateTime,
+        pickupLocation: b.pickupLocation,
+        dropoffLocation: b.dropoffLocation,
+        driverLocation: b.driverLocation || null,
+        estimatedDuration: b.estimatedDuration,
+        cartPrice: b.cartPrice,
+        totalPrice: b.totalPrice,
+        status: b.status,
+        specialRequests: b.specialRequests,
+        notes: b.notes,
+        driverId: b.driverId,
+        driverArrivedAt: b.driverArrivedAt,
+        completedAt: b.completedAt,
+        cancelledAt: b.cancelledAt
       }))
     });
   } catch (error) {
@@ -431,6 +516,7 @@ export const getBookingStats = async (req, res, next) => {
     const totalBookings = await Booking.countDocuments();
     const pendingBookings = await Booking.countDocuments({ status: 'Pending' });
     const confirmedBookings = await Booking.countDocuments({ status: 'Confirmed' });
+    const arrivedBookings = await Booking.countDocuments({ status: 'Arrived' });
     const activeBookings = await Booking.countDocuments({ status: 'Active' });
     const completedBookings = await Booking.countDocuments({ completedAt: { $ne: null } });
     const cancelledBookings = await Booking.countDocuments({ status: 'Cancelled' });
@@ -446,6 +532,7 @@ export const getBookingStats = async (req, res, next) => {
         totalBookings,
         pendingBookings,
         confirmedBookings,
+        arrivedBookings,
         activeBookings,
         completedBookings,
         cancelledBookings,
@@ -469,29 +556,24 @@ export const assignDriverToBooking = async (req, res, next) => {
       throw new AppError('Please provide driver ID', 400);
     }
 
-    // Verify booking exists
     let booking = await Booking.findById(bookingId);
     if (!booking) {
       throw new AppError('Booking not found', 404);
     }
 
-    // Check if already assigned to someone
     if (booking.driverId) {
       throw new AppError('Booking is already assigned to a driver', 400);
     }
 
-    // Verify driver exists
     const driver = await User.findById(driverId);
     if (!driver) {
       throw new AppError('Driver not found', 404);
     }
 
-    // Check if booking is already accepted or completed
     if (booking.status === 'Active' || booking.status === 'Completed') {
       throw new AppError(`Cannot assign driver to ${booking.status} booking`, 400);
     }
 
-    // Assign driver and update status to Confirmed
     booking.driverId = driverId;
     booking.status = 'Confirmed';
     await booking.save();
@@ -502,7 +584,6 @@ export const assignDriverToBooking = async (req, res, next) => {
       { path: 'driverId', select: 'name email' }
     ]);
 
-    // Emit booking assigned event to driver
     const io = req.app.locals.io;
     if (io) {
       notificationService.sendBookingAssigned(io, {
@@ -539,45 +620,29 @@ export const acceptBooking = async (req, res, next) => {
     const { id } = req.params;
     const driverId = req.user._id;
 
-    // Verify booking exists
     let booking = await Booking.findById(id);
     if (!booking) {
       throw new AppError('Booking not found', 404);
     }
 
-    // Check if driver is assigned to this booking
     if (!booking.driverId || booking.driverId.toString() !== driverId.toString()) {
       throw new AppError('Not assigned to this booking', 403);
     }
 
-    // Check if already accepted by this driver
     if (booking.driverAcceptedAt) {
       throw new AppError('You have already accepted this booking', 400);
     }
 
-    // Check booking status - must be Confirmed
     if (booking.status !== 'Confirmed') {
       throw new AppError(`Booking must be Confirmed to accept. Current status: ${booking.status}`, 400);
     }
 
-    // ATOMIC UPDATE: Update only if conditions still match (prevent race condition)
-    // This ensures only ONE driver can accept
     const updatedBooking = await Booking.findByIdAndUpdate(
       id,
-      {
-        $set: {
-          status: 'Active',
-          driverAcceptedAt: new Date()
-        }
-      },
-      {
-        new: true,
-        // Only update if these conditions are still true
-        runValidators: true
-      }
+      { $set: { status: 'Active', driverAcceptedAt: new Date() } },
+      { new: true, runValidators: true }
     );
 
-    // Verify the update actually happened with our conditions
     if (!updatedBooking) {
       throw new AppError('Failed to accept booking', 500);
     }
@@ -588,7 +653,6 @@ export const acceptBooking = async (req, res, next) => {
       { path: 'driverId', select: 'name email' }
     ]);
 
-    // Emit booking accepted event
     const io = req.app.locals.io;
     if (io) {
       notificationService.sendBookingAccepted(io, {
@@ -617,25 +681,25 @@ export const startTrip = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    // Verify booking exists
     let booking = await Booking.findById(id);
     if (!booking) {
       throw new AppError('Booking not found', 404);
     }
 
-    // Check if driver is assigned to this booking
     if (!booking.driverId || booking.driverId.toString() !== req.user._id.toString()) {
       throw new AppError('Not assigned to this booking', 403);
     }
 
-    // Check if driver accepted booking
     if (!booking.driverAcceptedAt) {
       throw new AppError('Must accept booking before starting trip', 400);
     }
 
-    // Start trip
     booking.status = 'Active';
     booking.tripStartedAt = new Date();
+    // Ensure driverArrivedAt is stamped when trip starts (locks out user cancellation)
+    if (!booking.driverArrivedAt) {
+      booking.driverArrivedAt = new Date();
+    }
     await booking.save();
 
     booking = await booking.populate([
@@ -644,7 +708,6 @@ export const startTrip = async (req, res, next) => {
       { path: 'driverId', select: 'name email' }
     ]);
 
-    // Emit trip started event
     const io = req.app.locals.io;
     if (io) {
       notificationService.sendTripStarted(io, {
@@ -675,28 +738,22 @@ export const completeTrip = async (req, res, next) => {
     const { id } = req.params;
     const { notes } = req.body;
 
-    // Verify booking exists
     let booking = await Booking.findById(id);
     if (!booking) {
       throw new AppError('Booking not found', 404);
     }
 
-    // Check if driver is assigned to this booking
     if (!booking.driverId || booking.driverId.toString() !== req.user._id.toString()) {
       throw new AppError('Not assigned to this booking', 403);
     }
 
-    // Check if trip is active
     if (booking.status !== 'Active') {
       throw new AppError(`Trip must be Active to complete. Current status: ${booking.status}`, 400);
     }
 
-    // Complete trip
     booking.status = 'Completed';
     booking.completedAt = new Date();
-    if (notes) {
-      booking.notes = notes;
-    }
+    if (notes) booking.notes = notes;
     await booking.save();
 
     booking = await booking.populate([
@@ -705,7 +762,6 @@ export const completeTrip = async (req, res, next) => {
       { path: 'driverId', select: 'name email' }
     ]);
 
-    // Emit trip completed event
     const io = req.app.locals.io;
     if (io) {
       notificationService.sendTripCompleted(io, {
@@ -729,3 +785,24 @@ export const completeTrip = async (req, res, next) => {
     next(error);
   }
 };
+
+// ─── Private helper ───────────────────────────────────────────────────────────
+const _formatBooking = (booking) => ({
+  _id: booking._id,
+  cartId: booking.cartId,
+  pickupDateTime: booking.pickupDateTime,
+  dropoffDateTime: booking.dropoffDateTime,
+  pickupLocation: booking.pickupLocation,
+  dropoffLocation: booking.dropoffLocation,
+  driverLocation: booking.driverLocation || null,
+  estimatedDuration: booking.estimatedDuration,
+  cartPrice: booking.cartPrice,
+  totalPrice: booking.totalPrice,
+  status: booking.status,
+  specialRequests: booking.specialRequests,
+  notes: booking.notes,
+  driverId: booking.driverId,
+  driverArrivedAt: booking.driverArrivedAt,
+  completedAt: booking.completedAt,
+  cancelledAt: booking.cancelledAt
+});

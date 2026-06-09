@@ -44,26 +44,42 @@ export const initSocket = (httpServer) => {
   });
 
   io.on('connection', (socket) => {
-    socket.on('join:booking', ({ bookingId }) => {
+    // ─── Booking room ─────────────────────────────────────────────────────────
+    socket.on('join:booking', ({ bookingId } = {}) => {
       if (!bookingId) return;
       socket.join(`booking:${bookingId}`);
     });
 
-    socket.on('leave:booking', ({ bookingId }) => {
+    socket.on('leave:booking', ({ bookingId } = {}) => {
       if (!bookingId) return;
       socket.leave(`booking:${bookingId}`);
     });
 
-    socket.on('join:driver', ({ driverId }) => {
-      if (!driverId) return;
-      socket.join(`driver:${driverId}`);
+    // ─── Driver personal room ─────────────────────────────────────────────────
+    // driverId is optional – falls back to the authenticated socket user id
+    socket.on('join:driver', ({ driverId } = {}) => {
+      const resolvedId = driverId || socket.data.user?.id;
+      if (!resolvedId) return;
+      socket.join(`driver:${resolvedId}`);
     });
 
-    socket.on('leave:driver', ({ driverId }) => {
-      if (!driverId) return;
-      socket.leave(`driver:${driverId}`);
+    socket.on('leave:driver', ({ driverId } = {}) => {
+      const resolvedId = driverId || socket.data.user?.id;
+      if (!resolvedId) return;
+      socket.leave(`driver:${resolvedId}`);
     });
 
+    // ─── Available drivers room (Flutter: join:drivers / leave:drivers) ────────
+    socket.on('join:drivers', () => {
+      if (socket.data.user?.role !== 'driver') return;
+      socket.join('drivers:available');
+    });
+
+    socket.on('leave:drivers', () => {
+      socket.leave('drivers:available');
+    });
+
+    // ─── Admin room ───────────────────────────────────────────────────────────
     socket.on('join:admin', () => {
       socket.join('admin:notifications');
     });
@@ -72,6 +88,7 @@ export const initSocket = (httpServer) => {
       socket.leave('admin:notifications');
     });
 
+    // ─── Driver location via socket (legacy / real-time streaming) ────────────
     socket.on('driver:location', async (payload) => {
       try {
         if (socket.data.user?.role !== 'driver') return;
@@ -102,7 +119,7 @@ export const initSocket = (httpServer) => {
           $set: { driverLocation: location }
         });
 
-        // Use notification service to broadcast location
+        // Broadcast location to booking room and driver room
         notificationService.sendLocationUpdate(io, {
           bookingId,
           driverId: resolvedDriverId,

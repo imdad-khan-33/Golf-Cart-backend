@@ -101,6 +101,7 @@ export const formatBookingResponse = (booking, driverRating = null) => {
       completedAt: formatTimestamp(bookingObj.completedAt),
       cancelledAt: formatTimestamp(bookingObj.cancelledAt),
       driverAcceptedAt: formatTimestamp(bookingObj.driverAcceptedAt),
+      driverArrivedAt: formatTimestamp(bookingObj.driverArrivedAt),
       tripStartedAt: formatTimestamp(bookingObj.tripStartedAt)
     }
   };

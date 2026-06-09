@@ -1,25 +1,36 @@
 
 export const notificationService = {
   /**
-   * Send new booking notification to admin
+   * Send new booking notification to admin and available drivers
    */
   sendNewBooking(io, bookingData) {
     if (!io) return;
-    io.to('admin:notifications').emit('new:booking', {
+
+    const payload = {
       bookingId: bookingData._id,
+      _id: bookingData._id,
       userId: bookingData.userId,
       userName: bookingData.userName,
       cartId: bookingData.cartId,
       cartName: bookingData.cartName,
       pickupDateTime: bookingData.pickupDateTime,
       pickupLocation: bookingData.pickupLocation,
+      dropoffDateTime: bookingData.dropoffDateTime,
+      dropoffLocation: bookingData.dropoffLocation,
       status: bookingData.status,
       totalPrice: bookingData.totalPrice,
+      specialRequests: bookingData.specialRequests || null,
       createdAt: bookingData.createdAt,
       timestamp: new Date(),
       message: 'New booking received',
       type: 'NEW_BOOKING'
-    });
+    };
+
+    // Notify admins
+    io.to('admin:notifications').emit('new:booking', payload);
+
+    // Notify available drivers so they can accept offers
+    io.to('drivers:available').emit('new:booking', payload);
   },
 
   /**
@@ -27,7 +38,7 @@ export const notificationService = {
    */
   sendBookingAssigned(io, bookingData) {
     if (!io) return;
-    
+
     // Notify driver
     io.to(`driver:${bookingData.driverId}`).emit('booking:assigned', {
       bookingId: bookingData._id,
@@ -63,7 +74,7 @@ export const notificationService = {
    */
   sendBookingAccepted(io, bookingData) {
     if (!io) return;
-    
+
     io.to(`booking:${bookingData._id}`).emit('booking:accepted', {
       bookingId: bookingData._id,
       driverId: bookingData.driverId,
@@ -81,7 +92,7 @@ export const notificationService = {
    */
   sendTripStarted(io, bookingData) {
     if (!io) return;
-    
+
     io.to(`booking:${bookingData._id}`).emit('trip:started', {
       bookingId: bookingData._id,
       driverId: bookingData.driverId,
@@ -100,13 +111,15 @@ export const notificationService = {
    */
   sendDriverArrived(io, bookingData) {
     if (!io) return;
-    
+
     io.to(`booking:${bookingData._id}`).emit('driver:arrived', {
       bookingId: bookingData._id,
       driverId: bookingData.driverId,
       driverName: bookingData.driverName,
       driverLocation: bookingData.driverLocation,
       pickupLocation: bookingData.pickupLocation,
+      status: bookingData.status,
+      driverArrivedAt: bookingData.driverArrivedAt,
       timestamp: new Date(),
       message: 'Driver has arrived at pickup location',
       type: 'DRIVER_ARRIVED'
@@ -118,7 +131,7 @@ export const notificationService = {
    */
   sendLocationUpdate(io, locationData) {
     if (!io) return;
-    
+
     io.to(`booking:${locationData.bookingId}`).emit('driver:location', {
       bookingId: locationData.bookingId,
       driverId: locationData.driverId,
@@ -149,7 +162,7 @@ export const notificationService = {
    */
   sendTripCompleted(io, bookingData) {
     if (!io) return;
-    
+
     io.to(`booking:${bookingData._id}`).emit('trip:completed', {
       bookingId: bookingData._id,
       driverId: bookingData.driverId,
@@ -178,35 +191,37 @@ export const notificationService = {
 
   /**
    * Send booking cancelled notification
+   * Emits to booking room and driver room with full payload
    */
   sendBookingCancelled(io, bookingData) {
     if (!io) return;
-    
-    io.to(`booking:${bookingData._id}`).emit('booking:cancelled', {
+
+    const payload = {
       bookingId: bookingData._id,
-      driverId: bookingData.driverId,
+      driverId: bookingData.driverId || null,
       status: bookingData.status,
       cancelledAt: bookingData.cancelledAt,
       cancelledBy: bookingData.cancelledBy, // 'user' or 'admin'
-      reason: bookingData.reason,
+      reason: bookingData.reason || null,
       timestamp: new Date(),
       message: 'Booking has been cancelled',
       type: 'BOOKING_CANCELLED'
-    });
+    };
 
-    // Notify driver if assigned
+    // Notify booking room (user listening to their booking)
+    io.to(`booking:${bookingData._id}`).emit('booking:cancelled', payload);
+
+    // Notify assigned driver so they can return to available/offers state
     if (bookingData.driverId) {
-      io.to(`driver:${bookingData.driverId}`).emit('booking:cancelled', {
-        bookingId: bookingData._id,
-        message: 'Your booking has been cancelled',
-        timestamp: new Date(),
-        type: 'BOOKING_CANCELLED'
-      });
+      io.to(`driver:${bookingData.driverId}`).emit('booking:cancelled', payload);
     }
 
     // Notify admin
     io.to('admin:notifications').emit('booking:cancelled', {
       bookingId: bookingData._id,
+      driverId: bookingData.driverId || null,
+      cancelledBy: bookingData.cancelledBy,
+      reason: bookingData.reason || null,
       message: 'Booking cancelled',
       timestamp: new Date(),
       type: 'BOOKING_CANCELLED'

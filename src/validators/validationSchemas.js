@@ -179,8 +179,11 @@ export const updateBookingStatusSchema = z.object({
     id: z.string().min(1, 'Booking ID is required')
   }),
   body: z.object({
-    status: z.enum(['Pending', 'Confirmed', 'Active', 'Completed', 'Cancelled']).optional(),
-    notes: z.string().optional()
+    status: z.enum(['Pending', 'Confirmed', 'Arrived', 'Active', 'Completed', 'Cancelled']).optional(),
+    notes: z.string().optional(),
+    driverId: z.string().optional(),
+    driverArrivedAt: z.string().datetime('Invalid driverArrivedAt format').optional(),
+    tripStartedAt: z.string().datetime('Invalid tripStartedAt format').optional()
   }).refine(data => Object.keys(data).length > 0, {
     message: 'At least one field must be provided for update'
   })
@@ -215,3 +218,16 @@ export const driverIdSchema = z.object({
     driverId: z.string().min(1, 'Driver ID is required')
   })
 });
+
+export const driverLocationSchema = z.object({
+  params: z.object({
+    id: z.string().min(1, 'Booking ID is required')
+  }),
+  body: z.object({
+    latitude: z.number().min(-90, 'Latitude must be >= -90').max(90, 'Latitude must be <= 90'),
+    longitude: z.number().min(-180, 'Longitude must be >= -180').max(180, 'Longitude must be <= 180'),
+    heading: z.number().nullable().optional(),
+    speed: z.number().nullable().optional()
+  })
+});
+

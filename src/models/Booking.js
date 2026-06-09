@@ -35,7 +35,7 @@ const bookingSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['Pending', 'Confirmed', 'Active', 'Completed', 'Cancelled'],
+      enum: ['Pending', 'Confirmed', 'Arrived', 'Active', 'Completed', 'Cancelled'],
       default: 'Pending'
     },
     specialRequests: {
@@ -66,6 +66,11 @@ const bookingSchema = new mongoose.Schema(
       type: Date,
       default: null,
       description: 'Timestamp when driver accepted the booking'
+    },
+    driverArrivedAt: {
+      type: Date,
+      default: null,
+      description: 'Timestamp when driver arrived at pickup location'
     },
     tripStartedAt: {
       type: Date,
