@@ -34,7 +34,8 @@ export const initSocket = (httpServer) => {
       socket.data.user = {
         id: user._id.toString(),
         role: user.role,
-        name: user.name
+        name: user.name,
+        isOnline: user.isOnline ?? false   // carry DB online status into socket
       };
 
       next();
@@ -43,7 +44,26 @@ export const initSocket = (httpServer) => {
     }
   });
 
-  io.on('connection', (socket) => {
+  io.on('connection', async (socket) => {
+    const userId = socket.data.user?.id;
+    const role   = socket.data.user?.role;
+
+    // ── Auto-restore rooms on every (re)connect ───────────────────────────
+    // The personal driver room is always joined so booking:cancelled and
+    // booking:assigned are never missed regardless of app state.
+    if (userId) {
+      socket.join(`driver:${userId}`);
+    }
+
+    // If the driver was already online in the DB, restore them to the
+    // available pool immediately — without waiting for join:drivers from Flutter.
+    // This handles reconnects where Flutter's join:drivers may arrive slightly
+    // late, or new bookings fire before the emit is processed.
+    if (role === 'driver' && userId && socket.data.user?.isOnline) {
+      socket.join('drivers:available');
+      console.log(`[SOCKET] driver ${userId} auto-joined drivers:available (was online)`);
+    }
+
     // ─── Booking room ─────────────────────────────────────────────────────────
     socket.on('join:booking', ({ bookingId } = {}) => {
       if (!bookingId) return;
@@ -58,20 +78,20 @@ export const initSocket = (httpServer) => {
     // ─── Driver personal room ─────────────────────────────────────────────────
     // driverId is optional – falls back to the authenticated socket user id
     socket.on('join:driver', ({ driverId } = {}) => {
-      const resolvedId = driverId || socket.data.user?.id;
+      const resolvedId = driverId || userId;
       if (!resolvedId) return;
       socket.join(`driver:${resolvedId}`);
     });
 
     socket.on('leave:driver', ({ driverId } = {}) => {
-      const resolvedId = driverId || socket.data.user?.id;
+      const resolvedId = driverId || userId;
       if (!resolvedId) return;
       socket.leave(`driver:${resolvedId}`);
     });
 
     // ─── Available drivers room (Flutter: join:drivers / leave:drivers) ────────
     socket.on('join:drivers', () => {
-      if (socket.data.user?.role !== 'driver') return;
+      if (role !== 'driver') return;
       socket.join('drivers:available');
     });
 
@@ -91,7 +111,7 @@ export const initSocket = (httpServer) => {
     // ─── Driver location via socket (legacy / real-time streaming) ────────────
     socket.on('driver:location', async (payload) => {
       try {
-        if (socket.data.user?.role !== 'driver') return;
+        if (role !== 'driver') return;
 
         const {
           bookingId,
@@ -104,7 +124,7 @@ export const initSocket = (httpServer) => {
 
         if (!bookingId || latitude === undefined || longitude === undefined) return;
 
-        const resolvedDriverId = driverId || socket.data.user?.id;
+        const resolvedDriverId = driverId || userId;
         if (!resolvedDriverId) return;
 
         const location = {
