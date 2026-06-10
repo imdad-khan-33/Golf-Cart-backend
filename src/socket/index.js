@@ -90,13 +90,25 @@ export const initSocket = (httpServer) => {
     });
 
     // ─── Available drivers room (Flutter: join:drivers / leave:drivers) ────────
-    socket.on('join:drivers', () => {
-      if (role !== 'driver') return;
+    socket.on('join:drivers', async () => {
+      if (role !== 'driver' || !userId) return;
+
       socket.join('drivers:available');
+      await User.findByIdAndUpdate(userId, { isOnline: true });
+
+      console.log(`[SOCKET] driver ${userId} joined drivers:available`);
+      socket.emit('drivers:joined', { ok: true, room: 'drivers:available' });
     });
 
-    socket.on('leave:drivers', () => {
+    socket.on('leave:drivers', async () => {
       socket.leave('drivers:available');
+
+      if (role === 'driver' && userId) {
+        await User.findByIdAndUpdate(userId, { isOnline: false });
+      }
+
+      console.log(`[SOCKET] driver ${userId} left drivers:available`);
+      socket.emit('drivers:left', { ok: true, room: 'drivers:available' });
     });
 
     // ─── Admin room ───────────────────────────────────────────────────────────

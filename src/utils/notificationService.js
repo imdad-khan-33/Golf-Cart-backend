@@ -29,6 +29,11 @@ export const notificationService = {
     // Notify admins
     io.to('admin:notifications').emit('new:booking', payload);
 
+    // [DEBUG] Log how many drivers are currently in the available room
+    // TODO: Remove this log once new:booking delivery is confirmed working
+    const room = io.sockets.adapter.rooms.get('drivers:available');
+    console.log('[SOCKET] new booking -> drivers:available size:', room?.size || 0);
+
     // Notify available drivers so they can accept offers
     io.to('drivers:available').emit('new:booking', payload);
   },
