@@ -675,23 +675,29 @@ export const logout = async (req, res, next) => {
 // @access  Private
 export const uploadProfilePicture = async (req, res, next) => {
   try {
-    const { profileImage } = req.body;
+    let profileImageUrl;
 
-    if (!profileImage) {
-      throw new AppError('Please provide a profile image URL', 400);
-    }
-
-    // Validate URL format
-    try {
-      new URL(profileImage);
-    } catch (error) {
-      throw new AppError('Invalid image URL format', 400);
+    if (req.file) {
+      // If a file was uploaded via multer
+      const host = req.get('host');
+      const protocol = req.protocol;
+      profileImageUrl = `${protocol}://${host}/uploads/profiles/${req.file.filename}`;
+    } else if (req.body.profileImage) {
+      // Fallback if they still send a URL
+      profileImageUrl = req.body.profileImage;
+      try {
+        new URL(profileImageUrl);
+      } catch (error) {
+        throw new AppError('Invalid image URL format', 400);
+      }
+    } else {
+      throw new AppError('Please upload an image file or provide an image URL', 400);
     }
 
     const user = await User.findById(req.user._id);
 
     // Update profile image
-    user.profileImage = profileImage;
+    user.profileImage = profileImageUrl;
     await user.save();
 
     res.status(200).json({

@@ -18,6 +18,7 @@ import {
 } from '../controllers/authController.js';
 import { protect } from '../middleware/authMiddleware.js';
 import { validate } from '../middleware/validationMiddleware.js';
+import { uploadProfile } from '../middleware/uploadMiddleware.js';
 import {
   registerSchema,
   loginSchema,
@@ -49,7 +50,7 @@ router.post('/verify-otp', validate(verifyOTPSchema), verifyOTP);
 router.post('/reset-password', validate(resetPasswordSchema), resetPassword);
 router.get('/me', protect, getMe);
 router.get('/stats', protect, getProfileStats);
-router.put('/profile-picture', protect, validate(uploadProfilePictureSchema), uploadProfilePicture);
+router.put('/profile-picture', protect, uploadProfile.single('profileImage'), uploadProfilePicture);
 router.delete('/account', protect, validate(deleteAccountSchema), deleteAccount);
 router.post('/logout', protect, logout);
 
