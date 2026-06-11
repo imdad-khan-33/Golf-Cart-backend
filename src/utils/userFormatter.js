@@ -6,7 +6,9 @@ export const formatUserResponse = (user) => {
     email: user.email,
     phoneNumber: user.phoneNumber,
     role: user.role,
+    profileImage: user.profileImage || null,
     isVerified: user.isVerified,
-    isActive: user.isActive
+    isActive: user.isActive,
+    lastLogin: user.lastLogin || null
   };
 };
