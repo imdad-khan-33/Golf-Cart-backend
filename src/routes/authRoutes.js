@@ -50,7 +50,7 @@ router.post('/verify-otp', validate(verifyOTPSchema), verifyOTP);
 router.post('/reset-password', validate(resetPasswordSchema), resetPassword);
 router.get('/me', protect, getMe);
 router.get('/stats', protect, getProfileStats);
-router.put('/profile-picture', protect, uploadProfile.single('profileImage'), uploadProfilePicture);
+router.post('/profile-picture', protect, uploadProfile.single('profileImage'), uploadProfilePicture);
 router.delete('/account', protect, validate(deleteAccountSchema), deleteAccount);
 router.post('/logout', protect, logout);
 
