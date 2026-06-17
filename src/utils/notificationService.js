@@ -11,6 +11,8 @@ export const notificationService = {
       _id: bookingData._id,
       userId: bookingData.userId,
       userName: bookingData.userName,
+      userPhoneNumber: bookingData.userPhoneNumber || null,
+      userProfileImage: bookingData.userProfileImage || null,
       cartId: bookingData.cartId,
       cartName: bookingData.cartName,
       pickupDateTime: bookingData.pickupDateTime,

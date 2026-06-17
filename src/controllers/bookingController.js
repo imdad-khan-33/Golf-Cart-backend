@@ -61,6 +61,8 @@ export const createBooking = async (req, res, next) => {
         _id: populatedBooking._id,
         userId: req.user._id,
         userName: req.user.name,
+        userPhoneNumber: bookingUser.phoneNumber || null,
+        userProfileImage: bookingUser.profileImage || null,
         cartId: populatedBooking.cartId._id,
         cartName: populatedBooking.cartId.name,
         pickupDateTime: populatedBooking.pickupDateTime,
