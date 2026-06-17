@@ -48,7 +48,12 @@ export const createBooking = async (req, res, next) => {
       status: 'Pending'
     });
 
-    const populatedBooking = await booking.populate('cartId', 'name seats price type');
+    const populatedBooking = await booking.populate([
+      { path: 'cartId', select: 'name seats price type' }
+    ]);
+
+    // Get fresh user info with profileImage and phoneNumber
+    const bookingUser = await User.findById(req.user._id).select('name email phoneNumber profileImage');
 
     const io = req.app.locals.io;
     if (io) {
@@ -74,6 +79,13 @@ export const createBooking = async (req, res, next) => {
       message: 'Booking created successfully',
       booking: {
         _id: populatedBooking._id,
+        user: {
+          _id: bookingUser._id,
+          name: bookingUser.name,
+          email: bookingUser.email,
+          phoneNumber: bookingUser.phoneNumber || null,
+          profileImage: bookingUser.profileImage || null
+        },
         cartId: populatedBooking.cartId,
         pickupDateTime: populatedBooking.pickupDateTime,
         dropoffDateTime: populatedBooking.dropoffDateTime,
@@ -86,7 +98,7 @@ export const createBooking = async (req, res, next) => {
         status: populatedBooking.status,
         specialRequests: populatedBooking.specialRequests,
         notes: populatedBooking.notes,
-        driverId: populatedBooking.driverId,
+        driver: null,
         driverArrivedAt: populatedBooking.driverArrivedAt,
         completedAt: populatedBooking.completedAt,
         cancelledAt: populatedBooking.cancelledAt
@@ -145,7 +157,7 @@ export const getUserBookings = async (req, res, next) => {
   try {
     const bookings = await Booking.find({ userId: req.user._id })
       .populate('cartId', 'name seats price type')
-      .populate('driverId', 'name email')
+      .populate('driverId', 'name email phoneNumber profileImage')
       .sort('-createdAt');
 
     const bookingsWithRatings = await Promise.all(
@@ -172,6 +184,8 @@ export const getUserBookings = async (req, res, next) => {
             _id: booking.driverId._id,
             name: booking.driverId.name,
             email: booking.driverId.email,
+            phoneNumber: booking.driverId.phoneNumber || null,
+            profileImage: booking.driverId.profileImage || null,
             rating: driverRating
           } : null,
           driverArrivedAt: booking.driverArrivedAt,
@@ -207,7 +221,8 @@ export const getUserBookings = async (req, res, next) => {
 export const getBookingById = async (req, res, next) => {
   try {
     const booking = await Booking.findById(req.params.id)
-      .populate('cartId', 'name seats price type');
+      .populate('cartId', 'name seats price type')
+      .populate('driverId', 'name email phoneNumber profileImage');
 
     if (!booking) {
       throw new AppError('Booking not found', 404);
@@ -233,7 +248,13 @@ export const getBookingById = async (req, res, next) => {
         status: booking.status,
         specialRequests: booking.specialRequests,
         notes: booking.notes,
-        driverId: booking.driverId,
+        driver: booking.driverId ? {
+          _id: booking.driverId._id,
+          name: booking.driverId.name,
+          email: booking.driverId.email,
+          phoneNumber: booking.driverId.phoneNumber || null,
+          profileImage: booking.driverId.profileImage || null
+        } : null,
         driverArrivedAt: booking.driverArrivedAt,
         completedAt: booking.completedAt,
         cancelledAt: booking.cancelledAt
@@ -475,8 +496,9 @@ export const updateDriverLocation = async (req, res, next) => {
 export const getAllBookings = async (req, res, next) => {
   try {
     const bookings = await Booking.find()
-      .populate('userId', 'name email')
+      .populate('userId', 'name email phoneNumber profileImage')
       .populate('cartId', 'name seats price type')
+      .populate('driverId', 'name email phoneNumber profileImage')
       .sort('-createdAt');
 
     res.status(200).json({
@@ -484,7 +506,13 @@ export const getAllBookings = async (req, res, next) => {
       count: bookings.length,
       bookings: bookings.map(b => ({
         _id: b._id,
-        userId: b.userId,
+        user: b.userId ? {
+          _id: b.userId._id,
+          name: b.userId.name,
+          email: b.userId.email,
+          phoneNumber: b.userId.phoneNumber || null,
+          profileImage: b.userId.profileImage || null
+        } : null,
         cartId: b.cartId,
         pickupDateTime: b.pickupDateTime,
         dropoffDateTime: b.dropoffDateTime,
@@ -497,7 +525,13 @@ export const getAllBookings = async (req, res, next) => {
         status: b.status,
         specialRequests: b.specialRequests,
         notes: b.notes,
-        driverId: b.driverId,
+        driver: b.driverId ? {
+          _id: b.driverId._id,
+          name: b.driverId.name,
+          email: b.driverId.email,
+          phoneNumber: b.driverId.phoneNumber || null,
+          profileImage: b.driverId.profileImage || null
+        } : null,
         driverArrivedAt: b.driverArrivedAt,
         completedAt: b.completedAt,
         cancelledAt: b.cancelledAt
@@ -579,9 +613,9 @@ export const assignDriverToBooking = async (req, res, next) => {
     await booking.save();
 
     booking = await booking.populate([
-      { path: 'userId', select: 'name email' },
+      { path: 'userId', select: 'name email phoneNumber profileImage' },
       { path: 'cartId', select: 'name price' },
-      { path: 'driverId', select: 'name email' }
+      { path: 'driverId', select: 'name email phoneNumber profileImage' }
     ]);
 
     const io = req.app.locals.io;
@@ -648,9 +682,9 @@ export const acceptBooking = async (req, res, next) => {
     }
 
     booking = await updatedBooking.populate([
-      { path: 'userId', select: 'name email' },
+      { path: 'userId', select: 'name email phoneNumber profileImage' },
       { path: 'cartId', select: 'name price' },
-      { path: 'driverId', select: 'name email' }
+      { path: 'driverId', select: 'name email phoneNumber profileImage' }
     ]);
 
     const io = req.app.locals.io;
@@ -667,7 +701,39 @@ export const acceptBooking = async (req, res, next) => {
     res.status(200).json({
       success: true,
       message: 'Booking accepted successfully',
-      booking
+      booking: {
+        _id: booking._id,
+        user: booking.userId ? {
+          _id: booking.userId._id,
+          name: booking.userId.name,
+          email: booking.userId.email,
+          phoneNumber: booking.userId.phoneNumber || null,
+          profileImage: booking.userId.profileImage || null
+        } : null,
+        cartId: booking.cartId,
+        pickupDateTime: booking.pickupDateTime,
+        dropoffDateTime: booking.dropoffDateTime,
+        pickupLocation: booking.pickupLocation,
+        dropoffLocation: booking.dropoffLocation,
+        driverLocation: booking.driverLocation || null,
+        estimatedDuration: booking.estimatedDuration,
+        cartPrice: booking.cartPrice,
+        totalPrice: booking.totalPrice,
+        status: booking.status,
+        specialRequests: booking.specialRequests,
+        notes: booking.notes,
+        driver: booking.driverId ? {
+          _id: booking.driverId._id,
+          name: booking.driverId.name,
+          email: booking.driverId.email,
+          phoneNumber: booking.driverId.phoneNumber || null,
+          profileImage: booking.driverId.profileImage || null
+        } : null,
+        driverAcceptedAt: booking.driverAcceptedAt,
+        driverArrivedAt: booking.driverArrivedAt,
+        completedAt: booking.completedAt,
+        cancelledAt: booking.cancelledAt
+      }
     });
   } catch (error) {
     next(error);
@@ -703,9 +769,9 @@ export const startTrip = async (req, res, next) => {
     await booking.save();
 
     booking = await booking.populate([
-      { path: 'userId', select: 'name email' },
+      { path: 'userId', select: 'name email phoneNumber profileImage' },
       { path: 'cartId', select: 'name price' },
-      { path: 'driverId', select: 'name email' }
+      { path: 'driverId', select: 'name email phoneNumber profileImage' }
     ]);
 
     const io = req.app.locals.io;
@@ -757,9 +823,9 @@ export const completeTrip = async (req, res, next) => {
     await booking.save();
 
     booking = await booking.populate([
-      { path: 'userId', select: 'name email' },
+      { path: 'userId', select: 'name email phoneNumber profileImage' },
       { path: 'cartId', select: 'name price' },
-      { path: 'driverId', select: 'name email' }
+      { path: 'driverId', select: 'name email phoneNumber profileImage' }
     ]);
 
     const io = req.app.locals.io;
